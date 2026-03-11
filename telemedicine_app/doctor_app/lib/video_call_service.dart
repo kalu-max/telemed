@@ -100,6 +100,8 @@ class DoctorVideoCallService extends ChangeNotifier {
     _socket!.on('answer', (data) => _handleAnswer(data));
     _socket!.on('iceCandidate', (data) => _handleIceCandidate(data));
     _socket!.on('callRejected', (_) => _handleCallEnded());
+    _socket!.on('callFailed', (data) => _handleCallFailed(data));
+    _socket!.on('call:error', (data) => _handleCallFailed(data));
     _socket!.on('callEnded', (_) => _handleCallEnded());
     _socket!.on('call:ended', (_) => _handleCallEnded());
 
@@ -416,6 +418,16 @@ class DoctorVideoCallService extends ChangeNotifier {
     _remoteUserName = null;
     _callStatus = CallStatus.idle;
     notifyListeners();
+  }
+
+  void _handleCallFailed(dynamic data) {
+    final reason = data is Map ? data['reason']?.toString() : null;
+    if (reason != null && reason.isNotEmpty) {
+      debugPrint('[DoctorVideoCall] Call failed: $reason');
+    } else {
+      debugPrint('[DoctorVideoCall] Call failed');
+    }
+    _cleanup();
   }
 
   @override

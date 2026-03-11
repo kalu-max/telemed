@@ -34,19 +34,58 @@ class _PatientListScreenState extends State<PatientListScreen> {
     if (!mounted) return;
 
     if (resp.success && resp.data != null) {
-      final seen = <String>{};
-      final patients = <Map<String, dynamic>>[];
+      const callableStatuses = {
+        'scheduled',
+        'pending',
+        'connected',
+        'in-progress',
+      };
+      final byPatientId = <String, Map<String, dynamic>>{};
+
       for (final appt in resp.data!) {
         final patientId = appt['patientId']?.toString() ?? '';
-        if (patientId.isNotEmpty && seen.add(patientId)) {
-          patients.add({
+        if (patientId.isEmpty) {
+          continue;
+        }
+
+        final status = appt['status']?.toString() ?? '';
+        final slotRaw = appt['slotTime']?.toString() ?? '';
+        final slotDate = DateTime.tryParse(slotRaw) ??
+            DateTime.fromMillisecondsSinceEpoch(0);
+        final existing = byPatientId[patientId];
+
+        if (existing == null ||
+            (existing['_slotDate'] as DateTime).isBefore(slotDate)) {
+          byPatientId[patientId] = {
             'patientId': patientId,
-            'patientName': appt['patientName']?.toString() ?? 'Patient #$patientId',
+            'patientName':
+                appt['patientName']?.toString() ?? 'Patient #$patientId',
             'reason': appt['reason']?.toString() ?? '',
-            'lastSeen': appt['slotTime']?.toString() ?? '',
-          });
+            'lastSeen': slotRaw,
+            'status': status,
+            'canCall': callableStatuses.contains(status),
+            '_slotDate': slotDate,
+          };
+          continue;
+        }
+
+        // Keep call enabled if any active appointment exists for this patient.
+        if (callableStatuses.contains(status)) {
+          existing['canCall'] = true;
         }
       }
+
+      final patients = byPatientId.values.toList()
+        ..sort(
+          (left, right) =>
+              (right['_slotDate'] as DateTime)
+                  .compareTo(left['_slotDate'] as DateTime),
+        );
+
+      for (final patient in patients) {
+        patient.remove('_slotDate');
+      }
+
       setState(() {
         _patients = patients;
         _loading = false;
@@ -88,6 +127,8 @@ class _PatientListScreenState extends State<PatientListScreen> {
           final patient = _patients[index];
           final patientId = patient['patientId'] ?? '';
           final patientName = patient['patientName'] ?? 'Unknown';
+          final canCall = patient['canCall'] == true;
+          final status = patient['status']?.toString() ?? '';
 
           return Card(
             margin: const EdgeInsets.only(bottom: 12),
@@ -130,6 +171,13 @@ class _PatientListScreenState extends State<PatientListScreen> {
                       'Reason: ${patient['reason']}',
                       style: TextStyle(color: Colors.grey[700]),
                     ),
+                    if (status.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Latest status: $status',
+                        style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                      ),
+                    ],
                   ],
                   const SizedBox(height: 12),
                   Row(
@@ -138,9 +186,11 @@ class _PatientListScreenState extends State<PatientListScreen> {
                         child: OutlinedButton.icon(
                           icon: const Icon(Icons.videocam, size: 18),
                           label: const Text('Call'),
-                          onPressed: () {
-                            widget.onCallPatient?.call(patientId, patientName);
-                          },
+                          onPressed: canCall
+                              ? () {
+                                  widget.onCallPatient?.call(patientId, patientName);
+                                }
+                              : null,
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -149,8 +199,19 @@ class _PatientListScreenState extends State<PatientListScreen> {
                           icon: const Icon(Icons.chat, size: 18),
                           label: const Text('Chat'),
                           onPressed: () async {
+                            final currentDoctorId = widget.api.currentUserId ?? '';
+                            if (currentDoctorId.isEmpty) {
+                              if (!mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Please sign in again to start chat.'),
+                                ),
+                              );
+                              return;
+                            }
+
                             final resp = await widget.api.startChat(
-                              [widget.api.currentUserId ?? '', patientId],
+                              [currentDoctorId, patientId],
                             );
                             if (resp.success && resp.data?['chatId'] != null && context.mounted) {
                               Navigator.push(

@@ -46,11 +46,13 @@ class _FindSpecialistScreenState extends State<FindSpecialistScreen> {
     try {
       final service = context.read<DoctorService>();
       final list = await service.fetchAvailableDoctors(specialization: specialization);
+      if (!mounted) return;
       setState(() {
         _doctors = list;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
         _isLoading = false;

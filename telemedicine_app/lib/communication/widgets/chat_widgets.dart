@@ -38,6 +38,12 @@ class _ChatScreenState extends State<ChatScreen> {
   late MessagingProvider _messagingProvider;
   final ImagePicker _imagePicker = ImagePicker();
 
+  bool get _canStartCallFromConversation {
+    final conversationId = widget.conversationId.toLowerCase();
+    return conversationId.startsWith('appointment-') ||
+        conversationId.startsWith('appt_');
+  }
+
   @override
   void initState() {
     super.initState();
@@ -85,6 +91,15 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _startAudioCall() {
+    if (!_canStartCallFromConversation) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Voice calls are available only for active appointments.'),
+        ),
+      );
+      return;
+    }
+
     if (mounted) {
       Navigator.push(
         context,
@@ -100,6 +115,15 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _startVideoCall() {
+    if (!_canStartCallFromConversation) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Video calls are available only for active appointments.'),
+        ),
+      );
+      return;
+    }
+
     if (mounted) {
       Navigator.push(
         context,
@@ -295,12 +319,12 @@ class _ChatScreenState extends State<ChatScreen> {
           IconButton(
             icon: const Icon(Icons.call),
             tooltip: 'Voice Call',
-            onPressed: () => _startAudioCall(),
+            onPressed: _canStartCallFromConversation ? _startAudioCall : null,
           ),
           IconButton(
             icon: const Icon(Icons.videocam),
             tooltip: 'Video Call',
-            onPressed: () => _startVideoCall(),
+            onPressed: _canStartCallFromConversation ? _startVideoCall : null,
           ),
         ],
       ),
@@ -364,13 +388,17 @@ class _ChatScreenState extends State<ChatScreen> {
                           Icons.videocam,
                           'Video Call',
                           Colors.teal,
-                          _startVideoCall,
+                          _canStartCallFromConversation
+                              ? _startVideoCall
+                              : null,
                         ),
                         _buildQuickActionButton(
                           Icons.call,
                           'Voice Call',
                           Colors.green,
-                          _startAudioCall,
+                          _canStartCallFromConversation
+                              ? _startAudioCall
+                              : null,
                         ),
                       ],
                     ),
@@ -447,7 +475,7 @@ class _ChatScreenState extends State<ChatScreen> {
     IconData icon,
     String label,
     Color color,
-    VoidCallback onTap,
+    VoidCallback? onTap,
   ) {
     return Material(
       color: Colors.transparent,
@@ -464,7 +492,7 @@ class _ChatScreenState extends State<ChatScreen> {
               Text(
                 label,
                 style: TextStyle(
-                  color: color,
+                  color: onTap == null ? Colors.grey : color,
                   fontWeight: FontWeight.w500,
                   fontSize: 12,
                 ),

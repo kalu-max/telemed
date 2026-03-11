@@ -259,9 +259,11 @@ router.post('/appointments/book', authorizeRole('patient'), asyncHandler(async (
 
   const appointmentId = `appt_${Date.now()}`;
   const patientName = req.user.name || patientId;
+  const doctorName = doctors[doctorId]?.name || 'Doctor';
   appointments[appointmentId] = {
     appointmentId,
     doctorId,
+    doctorName,
     patientId,
     patientName,
     slotTime: new Date(slotTime),
@@ -327,11 +329,52 @@ router.post('/chats/start', asyncHandler(async (req, res) => {
   const requester = req.user;
   if (!requester) return res.status(401).json({ error: 'Unauthorized' });
   const { participants } = req.body;
-  if (!participants || !Array.isArray(participants) || participants.length < 2) {
+  if (!participants || !Array.isArray(participants)) {
     return res.status(400).json({ error: 'participants array required (2+)'});
   }
+
+  // Normalize participant list and always include requester.
+  const normalizedParticipants = Array.from(
+    new Set(
+      participants
+        .map((id) => `${id || ''}`.trim())
+        .filter(Boolean)
+        .concat(requester.userId),
+    ),
+  );
+
+  if (normalizedParticipants.length < 2) {
+    return res.status(400).json({ error: 'participants array required (2+)'});
+  }
+
+  // Reuse an existing 1:1 chat with the same participants.
+  const existingChat = Object.values(chats).find((chat) => {
+    if (!Array.isArray(chat.participants)) {
+      return false;
+    }
+    if (chat.participants.length !== normalizedParticipants.length) {
+      return false;
+    }
+
+    return normalizedParticipants.every((participantId) =>
+      chat.participants.includes(participantId),
+    );
+  });
+
+  if (existingChat) {
+    return res.json({
+      chatId: existingChat.chatId,
+      reused: true,
+      chat: existingChat,
+    });
+  }
+
   const chatId = `chat_${Date.now()}`;
-  chats[chatId] = { chatId, participants, messages: [] };
+  chats[chatId] = {
+    chatId,
+    participants: normalizedParticipants,
+    messages: [],
+  };
   res.status(201).json({ chatId, chat: chats[chatId] });
 }));
 

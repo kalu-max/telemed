@@ -153,7 +153,7 @@ class VoiceRecorderWidget extends StatefulWidget {
 class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> {
   late VoiceMessagingProvider _voiceProvider;
   Duration _recordingDuration = Duration.zero;
-  late Timer _recordingTimer;
+  Timer? _recordingTimer;
 
   @override
   void initState() {
@@ -166,6 +166,7 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> {
       await _voiceProvider.startRecording();
       if (!mounted) return;
       _recordingTimer = Timer.periodic(const Duration(milliseconds: 100), (_) {
+        if (!mounted) return;
         setState(() {
           _recordingDuration += const Duration(milliseconds: 100);
         });
@@ -180,7 +181,7 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> {
 
   void _stopRecording() async {
     try {
-      _recordingTimer.cancel();
+      _recordingTimer?.cancel();
       final recordingPath = await _voiceProvider.stopRecording();
 
       if (mounted) {
@@ -262,9 +263,7 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> {
 
   @override
   void dispose() {
-    if (context.read<VoiceMessagingProvider>().isRecording) {
-      _recordingTimer.cancel();
-    }
+    _recordingTimer?.cancel();
     super.dispose();
   }
 }

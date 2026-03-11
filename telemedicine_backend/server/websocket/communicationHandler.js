@@ -10,6 +10,39 @@ const jwt = require('jsonwebtoken');
 const activeConnections = new Map();
 const roomConnections = new Map();
 const activeCalls = new Map(); // callId -> { callerId, receiverId, status, createdAt }
+const CALL_ALLOWED_APPOINTMENT_STATUSES = new Set([
+  'scheduled',
+  'pending',
+  'connected',
+  'in-progress',
+]);
+
+function hasActiveAppointmentBetweenUsers(userAId, userBId) {
+  if (!userAId || !userBId) {
+    return false;
+  }
+
+  try {
+    const { appointments } = require('../api/users');
+    return Object.values(appointments || {}).some((appointment) => {
+      const status = `${appointment?.status || ''}`.trim();
+      if (!CALL_ALLOWED_APPOINTMENT_STATUSES.has(status)) {
+        return false;
+      }
+
+      const patientId = `${appointment?.patientId || ''}`.trim();
+      const doctorId = `${appointment?.doctorId || ''}`.trim();
+
+      return (
+        (patientId === userAId && doctorId === userBId) ||
+        (patientId === userBId && doctorId === userAId)
+      );
+    });
+  } catch (error) {
+    logger.warn(`Appointment lookup failed while authorizing call: ${error.message}`);
+    return false;
+  }
+}
 
 function registerSocketIdentity(socket, data = {}) {
   const declaredUserId = (data.userId || socket.userId || '').toString().trim();
@@ -277,12 +310,41 @@ function initializeCommunicationSocket(io) {
      */
     socket.on('initiateCall', (data) => {
       try {
-        const { callId: incomingCallId, callerId, callerName, receiverId, callType, offer } = data;
+        const {
+          callId: incomingCallId,
+          callerId: declaredCallerId,
+          callerName,
+          receiverId,
+          callType,
+          offer,
+        } = data;
+        const callerId = `${socket.userId || declaredCallerId || ''}`.trim();
+        const normalizedReceiverId = `${receiverId || ''}`.trim();
+        const normalizedCallerName = `${callerName || socket.userId || 'Unknown'}`.trim();
         const callId = incomingCallId || `call_${Date.now()}`;
 
-        logger.info(`Call initiated: ${callId} from ${callerId} to ${receiverId}`);
+        if (!callerId || !normalizedReceiverId) {
+          socket.emit('callFailed', {
+            callId,
+            reason: 'Invalid caller or recipient',
+          });
+          return;
+        }
 
-        const receiverSocket = activeConnections.get(receiverId);
+        if (!hasActiveAppointmentBetweenUsers(callerId, normalizedReceiverId)) {
+          logger.warn(
+            `Call blocked (no active appointment): ${callerId} -> ${normalizedReceiverId}`,
+          );
+          socket.emit('callFailed', {
+            callId,
+            reason: 'Call allowed only for active appointments',
+          });
+          return;
+        }
+
+        logger.info(`Call initiated: ${callId} from ${callerId} to ${normalizedReceiverId}`);
+
+        const receiverSocket = activeConnections.get(normalizedReceiverId);
         if (receiverSocket) {
           // Normalize offer to { sdp, type } regardless of input (patient sends plain string)
           const normalizedOffer = typeof offer === 'string'
@@ -293,7 +355,7 @@ function initializeCommunicationSocket(io) {
           receiverSocket.emit('call:incoming', {
             callId,
             callerId,
-            callerName,
+            callerName: normalizedCallerName,
             callType,
             timestamp: new Date().toISOString(),
           });
@@ -303,7 +365,7 @@ function initializeCommunicationSocket(io) {
             receiverSocket.emit('offer', {
               callId,
               callerId,
-              callerName,
+              callerName: normalizedCallerName,
               offer: normalizedOffer,
               timestamp: new Date().toISOString(),
             });
@@ -312,12 +374,12 @@ function initializeCommunicationSocket(io) {
           // Track call for targeted routing
           activeCalls.set(callId, {
             callerId,
-            receiverId,
+            receiverId: normalizedReceiverId,
             status: 'ringing',
             createdAt: new Date().toISOString(),
           });
         } else {
-          logger.warn(`Receiver ${receiverId} offline for call ${callId}`);
+          logger.warn(`Receiver ${normalizedReceiverId} offline for call ${callId}`);
           socket.emit('callFailed', {
             callId,
             reason: 'Recipient offline',

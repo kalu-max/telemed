@@ -306,6 +306,7 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
+    final normalizedEmail = _emailController.text.trim().toLowerCase();
     final api = context.read<TeleMedicineApiClient>();
     final messagingService = context.read<MessagingService>();
     final videoCallingService = context.read<VideoCallingService>();
@@ -314,7 +315,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       final resp = await api.login(
-        email: _emailController.text.trim(),
+        email: normalizedEmail,
         password: _passwordController.text,
       );
 
@@ -387,6 +388,7 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
+    final normalizedEmail = _emailController.text.trim().toLowerCase();
     final api = context.read<TeleMedicineApiClient>();
     final messagingService = context.read<MessagingService>();
     final videoCallingService = context.read<VideoCallingService>();
@@ -395,7 +397,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       final resp = await api.register(
-        email: _emailController.text.trim(),
+        email: normalizedEmail,
         password: _passwordController.text,
         name: _nameController.text.trim(),
         role: 'patient',

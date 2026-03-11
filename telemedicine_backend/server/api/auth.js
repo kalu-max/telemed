@@ -31,13 +31,22 @@ const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
 // Register
 router.post('/register', asyncHandler(async (req, res) => {
   const { email, password, name, role, specialization } = req.body;
+  const normalizedEmail = `${email || ''}`.trim().toLowerCase();
+  const normalizedName = `${name || ''}`.trim();
+  const normalizedRole = `${role || ''}`.trim().toLowerCase();
+  const normalizedSpecialization = `${specialization || ''}`.trim();
 
   // Validation
-  if (!email || !password || !name || !role) {
+  if (!normalizedEmail || !password || !normalizedName || !normalizedRole) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
-  const existing = await User.findOne({ where: { email } });
+  const allowedRoles = new Set(['patient', 'doctor', 'admin']);
+  if (!allowedRoles.has(normalizedRole)) {
+    return res.status(400).json({ error: 'Invalid role' });
+  }
+
+  const existing = await User.findOne({ where: { email: normalizedEmail } });
   if (existing) {
     return res.status(409).json({ error: 'User already exists' });
   }
@@ -47,17 +56,17 @@ router.post('/register', asyncHandler(async (req, res) => {
 
   const user = await User.create({
     userId,
-    email,
+    email: normalizedEmail,
     password: hashedPassword,
-    name,
-    role,
+    name: normalizedName,
+    role: normalizedRole,
   });
 
   // Create doctor profile entry if role is doctor
-  if (role === 'doctor') {
+  if (normalizedRole === 'doctor') {
     await Doctor.create({
       userId,
-      specialization: specialization || '',
+      specialization: normalizedSpecialization,
       rating: 0,
       isAvailable: true,
       yearsOfExperience: 0,
@@ -71,8 +80,8 @@ router.post('/register', asyncHandler(async (req, res) => {
       const { doctors } = require('./users');
       doctors[userId] = {
         userId,
-        name,
-        specialization: specialization || '',
+        name: normalizedName,
+        specialization: normalizedSpecialization,
         rating: 0,
         isAvailable: true,
         yearsOfExperience: 0,
@@ -87,26 +96,26 @@ router.post('/register', asyncHandler(async (req, res) => {
   const token = jwt.sign(
     {
       userId,
-      email,
-      name,
-      role,
-      doctorId: role === 'doctor' ? userId : null
+      email: normalizedEmail,
+      name: normalizedName,
+      role: normalizedRole,
+      doctorId: normalizedRole === 'doctor' ? userId : null
     },
     process.env.JWT_SECRET || 'your-secret-key',
     { expiresIn: '24h' }
   );
 
-  logger.info(`New user registered: ${email} (${role})`);
+  logger.info(`New user registered: ${normalizedEmail} (${normalizedRole})`);
 
   res.status(201).json({
     message: 'User registered successfully',
     token,
     user: {
       userId,
-      email,
-      name,
-      role,
-      specialization: specialization || null
+      email: normalizedEmail,
+      name: normalizedName,
+      role: normalizedRole,
+      specialization: normalizedSpecialization || null
     }
   });
 }));
@@ -114,12 +123,13 @@ router.post('/register', asyncHandler(async (req, res) => {
 // Login
 router.post('/login', asyncHandler(async (req, res) => {
   const { email, password } = req.body;
+  const normalizedEmail = `${email || ''}`.trim().toLowerCase();
 
-  if (!email || !password) {
+  if (!normalizedEmail || !password) {
     return res.status(400).json({ error: 'Email and password required' });
   }
 
-  const user = await User.findOne({ where: { email } });
+  const user = await User.findOne({ where: { email: normalizedEmail } });
   if (!user) {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
@@ -150,7 +160,7 @@ router.post('/login', asyncHandler(async (req, res) => {
     { expiresIn: '24h' }
   );
 
-  logger.info(`User logged in: ${email}`);
+  logger.info(`User logged in: ${normalizedEmail}`);
 
   res.json({
     message: 'Login successful',
@@ -203,8 +213,9 @@ router.post('/logout', (req, res) => {
 // Reset password (direct reset without email OTP; extend with SMTP for production)
 router.post('/reset-password', asyncHandler(async (req, res) => {
   const { email, newPassword } = req.body;
+  const normalizedEmail = `${email || ''}`.trim().toLowerCase();
 
-  if (!email || !newPassword) {
+  if (!normalizedEmail || !newPassword) {
     return res.status(400).json({ error: 'Email and newPassword are required' });
   }
 
@@ -212,7 +223,7 @@ router.post('/reset-password', asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'Password must be at least 6 characters' });
   }
 
-  const user = await User.findOne({ where: { email } });
+  const user = await User.findOne({ where: { email: normalizedEmail } });
   if (!user) {
     return res.status(404).json({ error: 'No account found with that email address' });
   }
@@ -220,7 +231,7 @@ router.post('/reset-password', asyncHandler(async (req, res) => {
   const hashed = await bcrypt.hash(newPassword, 10);
   await user.update({ password: hashed });
 
-  logger.info(`Password reset for: ${email}`);
+  logger.info(`Password reset for: ${normalizedEmail}`);
   res.json({ success: true, message: 'Password reset successfully. You can now log in with your new password.' });
 }));
 

@@ -54,14 +54,52 @@ class _DoctorLoginScreenState extends State<DoctorLoginScreen> {
 
   Future<void> _checkAutoLogin() async {
     final isLoggedIn = await UserStorageService.isUserLoggedIn();
-    if (isLoggedIn && mounted) {
-      final userEmail = await UserStorageService.getUserEmail();
-      if (userEmail != null) {
-        setState(() {
-          _emailController.text = userEmail;
-        });
-      }
+    if (!isLoggedIn || !mounted) {
+      return;
     }
+
+    final savedInfo = await UserStorageService.getAllUserInfo();
+    final userEmail = savedInfo['userEmail'];
+    if (userEmail != null && mounted) {
+      setState(() {
+        _emailController.text = userEmail;
+      });
+    }
+
+    final token = savedInfo['token'];
+    final userId = savedInfo['userId'];
+    final userRole = savedInfo['userRole'];
+
+    if (token == null ||
+        token.isEmpty ||
+        userId == null ||
+        userId.isEmpty ||
+        (userRole != 'doctor' && userRole != 'admin')) {
+      return;
+    }
+
+    final api = TeleMedicineApiClient(await ServerConfig.getApiBaseUrl());
+    api.setAuthToken(token);
+    api.currentUserId = userId;
+
+    if (!mounted) {
+      return;
+    }
+
+    if (userRole == 'admin') {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => AdminDashboard(api: api)),
+      );
+      return;
+    }
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) => DoctorDashboard(api: api),
+      ),
+    );
   }
 
   @override
@@ -82,9 +120,10 @@ class _DoctorLoginScreenState extends State<DoctorLoginScreen> {
       return;
     }
 
+    final normalizedEmail = _emailController.text.trim().toLowerCase();
     final api = TeleMedicineApiClient(await ServerConfig.getApiBaseUrl());
     final resp = await api.login(
-      email: _emailController.text.trim(),
+      email: normalizedEmail,
       password: _passwordController.text,
     );
 
@@ -139,14 +178,14 @@ class _DoctorLoginScreenState extends State<DoctorLoginScreen> {
       debugPrint('⚠️ Warning: Failed to save user data: $e');
     }
 
+    if (!mounted) return;
+
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Login successful'),
         backgroundColor: Colors.green,
       ),
     );
-
-    if (!mounted) return;
 
     if (role == 'admin') {
       Navigator.pushReplacement(
@@ -363,10 +402,11 @@ class _DoctorRegisterScreenState extends State<DoctorRegisterScreen> {
       return;
     }
 
+    final normalizedEmail = _emailController.text.trim().toLowerCase();
     final api = TeleMedicineApiClient(await ServerConfig.getApiBaseUrl());
     final resp = await api.register(
       name: _nameController.text.trim(),
-      email: _emailController.text.trim(),
+      email: normalizedEmail,
       password: _passwordController.text,
       role: 'doctor',
       specialization: _selectedSpecialty,
@@ -374,7 +414,7 @@ class _DoctorRegisterScreenState extends State<DoctorRegisterScreen> {
 
     if (!mounted) return;
 
-    if (!resp.success) {
+    if (!resp.success || resp.data == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(resp.error?.toString() ?? 'Registration failed')),
       );
@@ -394,6 +434,21 @@ class _DoctorRegisterScreenState extends State<DoctorRegisterScreen> {
     // Set auth token for auto-login
     api.setAuthToken(token);
     api.currentUserId = user['userId']?.toString();
+
+    try {
+      await UserStorageService.saveUserData(
+        userId: user['userId']?.toString() ?? '',
+        userName: user['name']?.toString() ?? 'Doctor',
+        userEmail: user['email']?.toString() ?? '',
+        userRole: user['role']?.toString() ?? 'doctor',
+        token: token,
+        fullUserData: Map<String, dynamic>.from(user),
+      );
+    } catch (e) {
+      debugPrint('⚠️ Warning: Failed to save user data after registration: $e');
+    }
+
+    if (!mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -603,7 +658,14 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
       debugPrint('⚠️ Warning: Failed to load ICE servers: $e');
     }
 
-    await _callService!.initialize();
+    try {
+      await _callService!.initialize();
+    } catch (e) {
+      debugPrint('⚠️ Warning: Failed to initialize call service: $e');
+      return;
+    }
+
+    if (!mounted) return;
 
     _callService!.onIncomingCall = (callId, patientId, patientName) {
       if (!mounted) return;
@@ -747,10 +809,13 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: 'Logout',
-            onPressed: () {
-              Navigator.pushReplacement(
+            onPressed: () async {
+              await UserStorageService.clearUserData();
+              if (!context.mounted) return;
+              Navigator.pushAndRemoveUntil(
                 context,
                 MaterialPageRoute(builder: (_) => const DoctorLoginScreen()),
+                (route) => false,
               );
             },
           ),
@@ -875,6 +940,13 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
                   ? '${slotTime.hour}:${slotTime.minute.toString().padLeft(2, '0')}'
                   : 'time unknown';
               final status = appt['status']?.toString() ?? '';
+              const callableStatuses = {
+                'scheduled',
+                'pending',
+                'connected',
+                'in-progress',
+              };
+              final isCallable = callableStatuses.contains(status);
               final isPending = status == 'scheduled' || status == 'pending';
               return Card(
                 margin: const EdgeInsets.only(bottom: 12),
@@ -959,7 +1031,7 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
                                 },
                               ),
                             )
-                          else
+                          else if (isCallable)
                             Expanded(
                               child: ElevatedButton(
                                 style: ElevatedButton.styleFrom(
@@ -980,6 +1052,13 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
                                 },
                                 child: const Text('Call'),
                               ),
+                            )
+                          else
+                            const Expanded(
+                              child: ElevatedButton(
+                                onPressed: null,
+                                child: Text('Call Unavailable'),
+                              ),
                             ),
                           const SizedBox(width: 8),
                           OutlinedButton(
@@ -988,10 +1067,21 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
                                   const EdgeInsets.symmetric(vertical: 8),
                             ),
                             onPressed: () async {
+                              final currentDoctorId = widget.api.currentUserId ?? '';
+                              if (currentDoctorId.isEmpty) {
+                                if (!mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Please sign in again to start chat.'),
+                                  ),
+                                );
+                                return;
+                              }
+
                               final pid = patientId.toString();
                               if (pid.isNotEmpty) {
                                 final resp = await widget.api.startChat([
-                                  widget.api.currentUserId ?? '',
+                                  currentDoctorId,
                                   pid
                                 ]);
                                 if (resp.success &&
@@ -1243,6 +1333,7 @@ class _DoctorProfileEditScreenState extends State<DoctorProfileEditScreen> {
       return;
     }
     final resp = await widget.api.getDoctorProfile(widget.api.currentUserId!);
+    if (!mounted) return;
     if (resp.success && resp.data != null) {
       final data = resp.data!;
       setState(() {

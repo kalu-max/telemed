@@ -694,7 +694,7 @@ class TeleMedicineApiClient {
         '/api/chats/start',
         data: {'participants': participants},
       );
-      if (response.statusCode == 201) {
+      if (response.statusCode == 200 || response.statusCode == 201) {
         return ApiResponse(success: true, data: response.data);
       }
       return ApiResponse(success: false, error: response.data['error']);

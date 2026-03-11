@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'under_process.dart';
 import 'profile.dart';
 import 'user_model.dart';
@@ -26,6 +27,36 @@ class _PatientDashboardState extends State<PatientDashboard> {
   bool _loadingMetrics = true;
   List<Map<String, dynamic>> _appointments = [];
 
+  TeleMedicineApiClient? get _api {
+    if (widget.api != null) {
+      return widget.api;
+    }
+
+    try {
+      return context.read<TeleMedicineApiClient>();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String get _resolvedUserId {
+    final explicitUserId = widget.userId?.trim() ?? '';
+    if (explicitUserId.isNotEmpty) {
+      return explicitUserId;
+    }
+
+    return _api?.currentUserId?.trim() ?? '';
+  }
+
+  void _showApiUnavailableMessage() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Please sign in again to continue.'),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -34,8 +65,9 @@ class _PatientDashboardState extends State<PatientDashboard> {
   }
 
   Future<void> _loadAppointments() async {
-    if (widget.api == null) return;
-    final resp = await widget.api!.getAppointments();
+    final api = _api;
+    if (api == null) return;
+    final resp = await api.getAppointments();
     if (!mounted) return;
     if (resp.success && resp.data != null) {
       setState(() => _appointments = resp.data!);
@@ -43,7 +75,9 @@ class _PatientDashboardState extends State<PatientDashboard> {
   }
 
   Future<void> _loadMetrics() async {
-    if (widget.api == null || widget.userId == null || widget.userId!.isEmpty) {
+    final api = _api;
+    final userId = _resolvedUserId;
+    if (api == null || userId.isEmpty) {
       setState(() {
         _metrics = [];
         _loadingMetrics = false;
@@ -53,7 +87,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
     setState(() {
       _loadingMetrics = true;
     });
-    final resp = await widget.api!.getPatientMetrics(widget.userId!);
+    final resp = await api.getPatientMetrics(userId);
     if (!mounted) return;
     if (resp.success && resp.data != null) {
       setState(() {
@@ -69,6 +103,12 @@ class _PatientDashboardState extends State<PatientDashboard> {
   }
 
   void _showRescheduleDialog(Map<String, dynamic> appt) {
+    final api = _api;
+    if (api == null) {
+      _showApiUnavailableMessage();
+      return;
+    }
+
     final appointmentId =
         appt['appointmentId']?.toString() ?? appt['id']?.toString() ?? '';
     DateTime? newDate;
@@ -151,13 +191,12 @@ class _PatientDashboardState extends State<PatientDashboard> {
                             newTime!.hour,
                             newTime!.minute,
                           );
-                          final resp = await widget.api!
-                              .updateAppointmentStatus(
-                                appointmentId,
-                                'rescheduled',
-                              );
-                          if (resp.success && widget.api != null) {
-                            await widget.api!.bookAppointment(
+                          final resp = await api.updateAppointmentStatus(
+                            appointmentId,
+                            'rescheduled',
+                          );
+                          if (resp.success) {
+                            await api.bookAppointment(
                               doctorId: appt['doctorId']?.toString() ?? '',
                               slotTime: slotTime,
                               reason:
@@ -241,11 +280,16 @@ class _PatientDashboardState extends State<PatientDashboard> {
                     ),
                     TextButton(
                       onPressed: () {
+                        final api = _api;
+                        if (api == null) {
+                          _showApiUnavailableMessage();
+                          return;
+                        }
+
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) =>
-                                CalendarScreen(api: widget.api!),
+                            builder: (context) => CalendarScreen(api: api),
                           ),
                         );
                       },
@@ -315,10 +359,16 @@ class _PatientDashboardState extends State<PatientDashboard> {
         const Spacer(),
         GestureDetector(
           onTap: () {
+            final api = _api;
+            if (api == null) {
+              _showApiUnavailableMessage();
+              return;
+            }
+
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (context) => NotificationsScreen(api: widget.api!),
+                builder: (context) => NotificationsScreen(api: api),
               ),
             );
           },
@@ -397,7 +447,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (context) => _LabResultsScreen(api: widget.api),
+                builder: (context) => _LabResultsScreen(api: _api),
               ),
             ),
           ),
@@ -406,14 +456,18 @@ class _PatientDashboardState extends State<PatientDashboard> {
             Icons.history,
             'History',
             onTap: () {
-              if (widget.api != null) {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => ConsultationHistoryScreen(api: widget.api!),
-                  ),
-                );
+              final api = _api;
+              if (api == null) {
+                _showApiUnavailableMessage();
+                return;
               }
+
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ConsultationHistoryScreen(api: api),
+                ),
+              );
             },
           ),
         ],
@@ -888,19 +942,29 @@ class _PatientDashboardState extends State<PatientDashboard> {
           );
         } else {
           if (index == 1) {
+            final api = _api;
+            if (api == null) {
+              _showApiUnavailableMessage();
+              return;
+            }
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (context) => CalendarScreen(api: widget.api!),
+                builder: (context) => CalendarScreen(api: api),
               ),
             );
             return;
           }
           if (index == 2) {
+            final api = _api;
+            if (api == null) {
+              _showApiUnavailableMessage();
+              return;
+            }
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (context) => ChatListScreen(api: widget.api!),
+                builder: (context) => ChatListScreen(api: api),
               ),
             );
             return;
