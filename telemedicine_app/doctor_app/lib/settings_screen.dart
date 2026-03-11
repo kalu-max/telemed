@@ -61,7 +61,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               children: [
                 DropdownButtonFormField<int>(
                   decoration: const InputDecoration(labelText: 'Day of Week'),
-                  value: dayOfWeek,
+                  initialValue: dayOfWeek,
                   items: List.generate(7, (i) => DropdownMenuItem(value: i, child: Text(_dayNames[i]))),
                   onChanged: (v) => setDialogState(() => dayOfWeek = v),
                 ),
