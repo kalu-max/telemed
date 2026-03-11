@@ -60,7 +60,7 @@ dependencies:
   # Audio & Voice Messaging
   audio_session: ^0.1.16
   soundpool: ^2.4.0
-  record: ^4.4.4
+  record: ^5.1.2
   audioplayers: ^5.2.0
   
   # Encryption & Security
