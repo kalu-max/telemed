@@ -6,12 +6,12 @@ class AppConfig {
   // API Configuration
   static const String apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://localhost:5000',
+    defaultValue: 'https://telemed-backend.onrender.com',
   );
   
   static const String wsBaseUrl = String.fromEnvironment(
     'WS_BASE_URL',
-    defaultValue: 'ws://localhost:5000',
+    defaultValue: 'wss://telemed-backend.onrender.com',
   );
 
   // API Endpoints
