@@ -59,8 +59,7 @@ dependencies:
   
   # Audio & Voice Messaging
   audio_session: ^0.1.16
-  soundpool: ^2.4.0
-  record: ^5.1.2
+  record: ^6.0.0
   audioplayers: ^5.2.0
   
   # Encryption & Security
@@ -90,8 +89,8 @@ dependencies:
   syncfusion_flutter_core: ^23.1.36
   
   # Background Tasks
-  flutter_local_notifications: ^16.1.0
-  workmanager: ^0.5.1
+  flutter_local_notifications: ^17.2.4
+  workmanager: ^0.9.0
 
 dev_dependencies:
   flutter_test:

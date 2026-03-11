@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 // model & service
@@ -7,10 +7,9 @@ import 'doctor_service.dart';
 import 'api_client.dart';
 
 // Ensure this import points to the correct location of your Active Consultation Screen
-
 import 'consultation_waiting_screen.dart';
-import 'under_process.dart';
 import 'chat_screen.dart';
+import 'calendar.dart';
 
 class FindSpecialistScreen extends StatefulWidget {
   const FindSpecialistScreen({super.key});
@@ -281,7 +280,7 @@ class _FindSpecialistScreenState extends State<FindSpecialistScreen> {
                     if (doctor.consultationFee != null) ...[
                       const SizedBox(height: 6),
                       Text(
-                        'Fee: â‚¹${doctor.consultationFee!.toStringAsFixed(0)}',
+                        'Fee: ₹${doctor.consultationFee!.toStringAsFixed(0)}',
                         style: TextStyle(
                           color: Colors.grey[800],
                           fontSize: 13,
@@ -500,16 +499,16 @@ class _FindSpecialistScreenState extends State<FindSpecialistScreen> {
       onTap: (index) {
         if (index == 0) {
           Navigator.pop(context); // Go back to Dashboard
-        } else if (index != 1) {
-          String title = 'Feature';
-          if (index == 2) title = 'Appointments';
-          if (index == 3) title = 'Profile';
+        } else if (index == 2) {
+          // Appointments → Calendar
+          final api = context.read<DoctorService>().api;
           Navigator.push(
             context,
-            MaterialPageRoute(
-              builder: (context) => UnderProcessScreen(title: title),
-            ),
+            MaterialPageRoute(builder: (_) => CalendarScreen(api: api)),
           );
+        } else if (index == 3) {
+          // Profile → pop to dashboard which has profile access
+          Navigator.pop(context);
         }
       },
       selectedItemColor: Colors.teal[700],
