@@ -1,0 +1,1202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MediCare Connect - Doctor Portal</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 280px;
+            background: #fff;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .doctor-profile {
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .profile-avatar {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: #667eea;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            margin: 0 auto 10px;
+        }
+
+        .profile-name {
+            font-weight: 600;
+            font-size: 16px;
+            margin-bottom: 5px;
+        }
+
+        .profile-specialty {
+            color: #666;
+            font-size: 13px;
+        }
+
+        .appointments-section {
+            margin-top: 30px;
+        }
+
+        .section-title {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .appointment-item {
+            padding: 12px;
+            background: #f5f5f5;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border-left: 4px solid #667eea;
+        }
+
+        .appointment-item:hover {
+            background: #e8e8e8;
+            transform: translateX(5px);
+        }
+
+        .appointment-item.active {
+            background: #667eea;
+            color: white;
+            border-left-color: #5568d3;
+        }
+
+        .appointment-time {
+            font-size: 12px;
+            opacity: 0.7;
+            margin-bottom: 4px;
+        }
+
+        .appointment-patient {
+            font-weight: 500;
+            font-size: 13px;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-top: 6px;
+        }
+
+        .status-pending {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status-active {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Header */
+        .header {
+            background: white;
+            padding: 20px 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header-title {
+            font-size: 24px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+        }
+
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+
+        .btn-danger {
+            background: #ff6b6b;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #ff5252;
+        }
+
+        /* Video Area */
+        .video-area {
+            flex: 1;
+            display: flex;
+            gap: 15px;
+            padding: 20px;
+            background: #f5f5f5;
+            overflow: hidden;
+        }
+
+        .video-container {
+            display: flex;
+            gap: 15px;
+            width: 100%;
+        }
+
+        .video-window {
+            flex: 1;
+            background: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            position: relative;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .video-label {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            background: rgba(0,0,0,0.6);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .no-video {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .placeholder-icon {
+            font-size: 80px;
+            color: rgba(255,255,255,0.3);
+        }
+
+        /* Controls */
+        .video-controls {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.7);
+            padding: 15px 25px;
+            border-radius: 50px;
+            display: flex;
+            gap: 10px;
+            z-index: 10;
+        }
+
+        .control-btn {
+            width: 45px;
+            height: 45px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.2);
+            border: 2px solid white;
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            transition: all 0.3s ease;
+        }
+
+        .control-btn:hover {
+            background: rgba(255,255,255,0.3);
+            transform: scale(1.1);
+        }
+
+        .control-btn.active {
+            background: #667eea;
+        }
+
+        .control-btn.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Call Stats */
+        .call-stats {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: rgba(0,0,0,0.6);
+            color: #0f0;
+            padding: 10px 15px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.6;
+        }
+
+        .stat-item {
+            margin-bottom: 5px;
+        }
+
+        /* Chat Panel */
+        .chat-panel {
+            width: 300px;
+            background: white;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+            display: none;
+        }
+
+        .chat-panel.active {
+            display: flex;
+        }
+
+        .chat-header {
+            padding: 15px;
+            background: #667eea;
+            color: white;
+            font-weight: 600;
+            border-radius: 8px 8px 0 0;
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+            background: #f9f9f9;
+        }
+
+        .message {
+            margin-bottom: 12px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .message.own {
+            align-items: flex-end;
+        }
+
+        .message-content {
+            background: #667eea;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 8px;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+
+        .message.own .message-content {
+            background: #667eea;
+        }
+
+        .message:not(.own) .message-content {
+            background: #e0e0e0;
+            color: #333;
+        }
+
+        .message-time {
+            font-size: 11px;
+            color: #999;
+            margin-top: 4px;
+        }
+
+        .chat-input-area {
+            padding: 12px;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .chat-input {
+            width: 100%;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 8px;
+            font-size: 13px;
+            resize: none;
+            height: 60px;
+        }
+
+        .chat-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
+        }
+
+        /* Modals */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.7);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        }
+
+        .modal-title {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #333;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 25px;
+        }
+
+        .modal-actions .btn {
+            flex: 1;
+        }
+
+        /* Status Indicators */
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 6px;
+        }
+
+        .status-indicator.online {
+            background: #28a745;
+        }
+
+        .status-indicator.offline {
+            background: #dc3545;
+        }
+
+        .status-indicator.busy {
+            background: #ffc107;
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .sidebar {
+                width: 220px;
+            }
+
+            .video-container {
+                flex-direction: column;
+            }
+
+            .chat-panel {
+                width: 100%;
+                max-height: 300px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                flex-direction: column;
+            }
+
+            .sidebar {
+                width: 100%;
+                max-height: 200px;
+                overflow-x: auto;
+                overflow-y: hidden;
+            }
+
+            .appointments-section {
+                display: flex;
+                gap: 10px;
+                overflow-x: auto;
+                margin-top: 15px;
+            }
+
+            .appointment-item {
+                min-width: 150px;
+                margin-bottom: 0;
+            }
+
+            .header {
+                padding: 15px;
+                flex-direction: column;
+                gap: 10px;
+            }
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+            z-index: 2000;
+            animation: slideIn 0.3s ease;
+        }
+
+        .notification.success {
+            border-left: 4px solid #28a745;
+        }
+
+        .notification.error {
+            border-left: 4px solid #dc3545;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="doctor-profile">
+                <div class="profile-avatar" id="profileAvatar">👨‍⚕️</div>
+                <div class="profile-name" id="doctorName">Dr. Smith</div>
+                <div class="profile-specialty" id="doctorSpecialty">Cardiologist</div>
+            </div>
+
+            <div class="appointments-section">
+                <div class="section-title">Upcoming Appointments</div>
+                <div id="appointmentsList"></div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Header -->
+            <div class="header">
+                <div class="header-title">MediCare Connect - Doctor Portal</div>
+                <div class="header-actions">
+                    <button class="btn btn-secondary" id="chatToggleBtn" onclick="toggleChat()">
+                        💬 Chat
+                    </button>
+                    <button class="btn btn-secondary" id="statsToggleBtn" onclick="toggleStats()">
+                        📊 Stats
+                    </button>
+                    <button class="btn btn-danger" id="logoutBtn" onclick="logout()">
+                        🚪 Logout
+                    </button>
+                </div>
+            </div>
+
+            <!-- Video Area -->
+            <div class="video-area">
+                <div class="video-container">
+                    <!-- Doctor Video -->
+                    <div class="video-window">
+                        <div class="video-label">You (Doctor)</div>
+                        <video id="localVideo" playsinline autoplay muted></video>
+                        <div class="video-controls" id="videoControls">
+                            <button class="control-btn active" id="micBtn" onclick="toggleMic()" title="Toggle Microphone">
+                                🎤
+                            </button>
+                            <button class="control-btn active" id="cameraBtn" onclick="toggleCamera()" title="Toggle Camera">
+                                📹
+                            </button>
+                            <button class="control-btn" id="screenBtn" onclick="toggleScreenShare()" title="Share Screen">
+                                🖥️
+                            </button>
+                            <button class="control-btn" id="chatBtn" onclick="toggleChat()" title="Chat">
+                                💬
+                            </button>
+                        </div>
+                        <div class="call-stats" id="callStats" style="display: none;">
+                            <div class="stat-item">Resolution: <span id="statResolution">-</span></div>
+                            <div class="stat-item">FPS: <span id="statFPS">-</span></div>
+                            <div class="stat-item">Bitrate: <span id="statBitrate">-</span></div>
+                            <div class="stat-item">Latency: <span id="statLatency">-</span> ms</div>
+                        </div>
+                    </div>
+
+                    <!-- Patient Video -->
+                    <div class="video-window" id="patientVideoContainer">
+                        <div class="no-video">
+                            <div class="placeholder-icon">👤</div>
+                        </div>
+                        <div class="video-label">Patient</div>
+                        <video id="remoteVideo" playsinline></video>
+                    </div>
+                </div>
+
+                <!-- Chat Panel -->
+                <div class="chat-panel" id="chatPanel">
+                    <div class="chat-header">Chat with Patient</div>
+                    <div class="chat-messages" id="chatMessages"></div>
+                    <div class="chat-input-area">
+                        <input 
+                            type="text" 
+                            class="chat-input" 
+                            id="chatInput" 
+                            placeholder="Type a message..." 
+                            onkeypress="handleChatKeyPress(event)"
+                        >
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Login Modal -->
+    <div class="modal active" id="loginModal">
+        <div class="modal-content">
+            <div class="modal-title">Doctor Login</div>
+            <div class="form-group">
+                <label class="form-label">Email</label>
+                <input type="email" class="form-input" id="loginEmail" placeholder="doctor@example.com">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Password</label>
+                <input type="password" class="form-input" id="loginPassword" placeholder="Enter password">
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-primary" onclick="login()">Login</button>
+                <button class="btn btn-secondary" onclick="switchToRegister()">Register</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Register Modal -->
+    <div class="modal" id="registerModal">
+        <div class="modal-content">
+            <div class="modal-title">Doctor Registration</div>
+            <div class="form-group">
+                <label class="form-label">Full Name</label>
+                <input type="text" class="form-input" id="registerName" placeholder="Dr. John Doe">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Specialty</label>
+                <input type="text" class="form-input" id="registerSpecialty" placeholder="Cardiologist">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Email</label>
+                <input type="email" class="form-input" id="registerEmail" placeholder="doctor@example.com">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Password</label>
+                <input type="password" class="form-input" id="registerPassword" placeholder="Enter password">
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-primary" onclick="register()">Register</button>
+                <button class="btn btn-secondary" onclick="switchToLogin()">Back to Login</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+    <script>
+        // Global variables
+        let socket = null;
+        let localStream = null;
+        let peerConnection = null;
+        let authToken = null;
+        let currentDoctorId = null;
+        let currentPatientId = null;
+        let isMicOn = true;
+        let isCameraOn = true;
+        let isScreenSharing = false;
+        let callStats = {
+            resolution: '-',
+            fps: 0,
+            bitrate: 0,
+            latency: 0
+        };
+
+        // WebRTC Configuration
+        const rtcConfig = {
+            iceServers: [
+                { urls: ['stun:stun.l.google.com:19302'] },
+                { urls: ['stun:stun1.l.google.com:19302'] }
+            ]
+        };
+
+        // Initialize Socket.io connection
+        function initializeSocket() {
+            socket = io(window.location.origin, {
+                reconnection: true,
+                reconnectionDelay: 1000,
+                reconnectionDelayMax: 5000,
+                reconnectionAttempts: 5,
+                auth: {
+                    token: authToken
+                }
+            });
+
+            socket.on('connect', () => {
+                console.log('Connected to signaling server');
+                showNotification('Connected to server', 'success');
+            });
+
+            socket.on('disconnect', () => {
+                console.log('Disconnected from signaling server');
+                showNotification('Disconnected from server', 'error');
+            });
+
+            socket.on('patient:call-request', async (data) => {
+                console.log('Incoming call from patient:', data);
+                currentPatientId = data.patientId;
+                showCallIncoming(data.patientName);
+                initializeCall(true);
+            });
+
+            socket.on('webrtc:offer', async (data) => {
+                console.log('Received offer from patient');
+                await handleOffer(data.offer);
+            });
+
+            socket.on('webrtc:answer', async (data) => {
+                console.log('Received answer from patient');
+                await handleAnswer(data.answer);
+            });
+
+            socket.on('webrtc:ice-candidate', async (data) => {
+                console.log('Received ICE candidate');
+                await handleIceCandidate(data.candidate);
+            });
+
+            socket.on('chat:message', (data) => {
+                displayChatMessage(data.message, false);
+            });
+
+            socket.on('call:ended', () => {
+                endCall();
+            });
+        }
+
+        // Initialize local media
+        async function initializeCall(isIncoming = false) {
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    },
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    }
+                });
+
+                document.getElementById('localVideo').srcObject = localStream;
+
+                // Initialize WebRTC peer connection
+                initializePeerConnection();
+
+                if (!isIncoming) {
+                    // Doctor initiates call - create and send offer
+                    const offer = await peerConnection.createOffer({
+                        offerToReceiveAudio: true,
+                        offerToReceiveVideo: true
+                    });
+                    await peerConnection.setLocalDescription(offer);
+                    socket.emit('webrtc:offer', {
+                        offer: offer,
+                        recipientId: currentPatientId
+                    });
+                }
+
+                showNotification('Call started - waiting for patient', 'success');
+            } catch (error) {
+                console.error('Error initializing call:', error);
+                showNotification('Failed to access camera/microphone', 'error');
+            }
+        }
+
+        // Initialize peer connection
+        function initializePeerConnection() {
+            peerConnection = new RTCPeerConnection(rtcConfig);
+
+            // Add local tracks
+            localStream.getTracks().forEach(track => {
+                peerConnection.addTrack(track, localStream);
+            });
+
+            // Handle remote tracks
+            peerConnection.ontrack = (event) => {
+                console.log('Received remote track:', event.track.kind);
+                const remoteVideo = document.getElementById('remoteVideo');
+                if (event.streams && event.streams[0]) {
+                    remoteVideo.srcObject = event.streams[0];
+                }
+            };
+
+            // Handle ICE candidates
+            peerConnection.onicecandidate = (event) => {
+                if (event.candidate) {
+                    socket.emit('webrtc:ice-candidate', {
+                        candidate: event.candidate,
+                        recipientId: currentPatientId
+                    });
+                }
+            };
+
+            // Monitor connection state
+            peerConnection.onconnectionstatechange = () => {
+                console.log('Connection state:', peerConnection.connectionState);
+                if (peerConnection.connectionState === 'failed') {
+                    showNotification('Connection failed - attempting to reconnect', 'error');
+                } else if (peerConnection.connectionState === 'connected') {
+                    showNotification('Call connected', 'success');
+                    startMonitoringCallStats();
+                }
+            };
+
+            // Monitor ICE connection state
+            peerConnection.oniceconnectionstatechange = () => {
+                console.log('ICE connection state:', peerConnection.iceConnectionState);
+            };
+        }
+
+        // Handle WebRTC offer
+        async function handleOffer(offer) {
+            try {
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+                socket.emit('webrtc:answer', {
+                    answer: answer,
+                    recipientId: currentPatientId
+                });
+            } catch (error) {
+                console.error('Error handling offer:', error);
+            }
+        }
+
+        // Handle WebRTC answer
+        async function handleAnswer(answer) {
+            try {
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+            } catch (error) {
+                console.error('Error handling answer:', error);
+            }
+        }
+
+        // Handle ICE candidate
+        async function handleIceCandidate(candidate) {
+            try {
+                if (candidate) {
+                    await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+                }
+            } catch (error) {
+                console.error('Error adding ICE candidate:', error);
+            }
+        }
+
+        // Toggle microphone
+        function toggleMic() {
+            if (localStream) {
+                const audioTracks = localStream.getAudioTracks();
+                audioTracks.forEach(track => {
+                    track.enabled = !track.enabled;
+                });
+                isMicOn = !isMicOn;
+                document.getElementById('micBtn').style.opacity = isMicOn ? '1' : '0.5';
+            }
+        }
+
+        // Toggle camera
+        function toggleCamera() {
+            if (localStream) {
+                const videoTracks = localStream.getVideoTracks();
+                videoTracks.forEach(track => {
+                    track.enabled = !track.enabled;
+                });
+                isCameraOn = !isCameraOn;
+                document.getElementById('cameraBtn').style.opacity = isCameraOn ? '1' : '0.5';
+            }
+        }
+
+        // Toggle screen share
+        async function toggleScreenShare() {
+            try {
+                if (!isScreenSharing) {
+                    const screenStream = await navigator.mediaDevices.getDisplayMedia({
+                        video: { cursor: 'always' }
+                    });
+                    
+                    const screenTrack = screenStream.getVideoTracks()[0];
+                    const sender = peerConnection.getSenders().find(s => s.track?.kind === 'video');
+                    
+                    if (sender) {
+                        await sender.replaceTrack(screenTrack);
+                        isScreenSharing = true;
+                        document.getElementById('screenBtn').style.background = '#667eea';
+                        
+                        screenTrack.onended = () => {
+                            toggleScreenShare();
+                        };
+                    }
+                } else {
+                    const videoTrack = localStream.getVideoTracks()[0];
+                    const sender = peerConnection.getSenders().find(s => s.track?.kind === 'video');
+                    
+                    if (sender && videoTrack) {
+                        await sender.replaceTrack(videoTrack);
+                        isScreenSharing = false;
+                        document.getElementById('screenBtn').style.background = 'rgba(255,255,255,0.2)';
+                    }
+                }
+            } catch (error) {
+                console.error('Error toggling screen share:', error);
+            }
+        }
+
+        // Toggle chat panel
+        function toggleChat() {
+            document.getElementById('chatPanel').classList.toggle('active');
+        }
+
+        // Toggle stats display
+        function toggleStats() {
+            const statsDiv = document.getElementById('callStats');
+            statsDiv.style.display = statsDiv.style.display === 'none' ? 'block' : 'none';
+        }
+
+        // Send chat message
+        function sendChatMessage() {
+            const input = document.getElementById('chatInput');
+            const message = input.value.trim();
+            
+            if (message) {
+                socket.emit('chat:message', {
+                    message: message,
+                    recipientId: currentPatientId,
+                    sender: 'doctor'
+                });
+                displayChatMessage(message, true);
+                input.value = '';
+            }
+        }
+
+        // Handle chat input key press
+        function handleChatKeyPress(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendChatMessage();
+            }
+        }
+
+        // Display chat message
+        function displayChatMessage(message, isOwn = true) {
+            const messagesDiv = document.getElementById('chatMessages');
+            const messageEl = document.createElement('div');
+            messageEl.className = `message ${isOwn ? 'own' : ''}`;
+            
+            const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            
+            messageEl.innerHTML = `
+                <div class="message-content">${message}</div>
+                <div class="message-time">${time}</div>
+            `;
+            
+            messagesDiv.appendChild(messageEl);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        // Monitor call quality stats
+        function startMonitoringCallStats() {
+            const statsInterval = setInterval(async () => {
+                if (!peerConnection) {
+                    clearInterval(statsInterval);
+                    return;
+                }
+
+                try {
+                    const stats = await peerConnection.getStats();
+                    stats.forEach(stat => {
+                        if (stat.type === 'inboundRtp' && stat.kind === 'video') {
+                            const videoStats = {
+                                bytesReceived: stat.bytesReceived,
+                                packetsReceived: stat.packetsReceived,
+                                jitter: stat.jitter
+                            };
+                            updateCallStatsDisplay(videoStats);
+                        }
+                    });
+                } catch (error) {
+                    console.error('Error getting stats:', error);
+                }
+            }, 1000);
+        }
+
+        // Update call stats display
+        function updateCallStatsDisplay(stats) {
+            document.getElementById('statLatency').textContent = 
+                Math.round((stats.jitter || 0) * 1000);
+            document.getElementById('statBitrate').textContent = 
+                Math.round((stats.bytesReceived || 0) / 1024) + ' KB';
+        }
+
+        // End call
+        function endCall() {
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+            }
+            document.getElementById('localVideo').srcObject = null;
+            document.getElementById('remoteVideo').srcObject = null;
+            showNotification('Call ended', 'success');
+        }
+
+        // Authentication
+        function login() {
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+
+            if (!email || !password) {
+                showNotification('Please fill in all fields', 'error');
+                return;
+            }
+
+            // Demo login - in production, this would be a real API call
+            authToken = 'demo_doctor_token_' + Date.now();
+            currentDoctorId = 'doctor_' + Math.random().toString(36).substr(2, 9);
+
+            document.getElementById('doctorName').textContent = 'Dr. ' + email.split('@')[0];
+            document.getElementById('loginModal').classList.remove('active');
+
+            initializeSocket();
+            loadAppointments();
+            showNotification('Logged in successfully', 'success');
+        }
+
+        function register() {
+            const name = document.getElementById('registerName').value;
+            const specialty = document.getElementById('registerSpecialty').value;
+            const email = document.getElementById('registerEmail').value;
+            const password = document.getElementById('registerPassword').value;
+
+            if (!name || !specialty || !email || !password) {
+                showNotification('Please fill in all fields', 'error');
+                return;
+            }
+
+            // Demo registration - in production, this would be a real API call
+            authToken = 'demo_doctor_token_' + Date.now();
+            currentDoctorId = 'doctor_' + Math.random().toString(36).substr(2, 9);
+
+            document.getElementById('doctorName').textContent = name;
+            document.getElementById('doctorSpecialty').textContent = specialty;
+            document.getElementById('registerModal').classList.remove('active');
+
+            initializeSocket();
+            loadAppointments();
+            showNotification('Registered successfully', 'success');
+        }
+
+        function switchToRegister() {
+            document.getElementById('loginModal').classList.remove('active');
+            document.getElementById('registerModal').classList.add('active');
+        }
+
+        function switchToLogin() {
+            document.getElementById('registerModal').classList.remove('active');
+            document.getElementById('loginModal').classList.add('active');
+        }
+
+        function logout() {
+            if (confirm('Are you sure you want to logout?')) {
+                authToken = null;
+                currentDoctorId = null;
+                endCall();
+                document.getElementById('loginModal').classList.add('active');
+                showNotification('Logged out', 'success');
+            }
+        }
+
+        // Load appointments
+        function loadAppointments() {
+            // Demo appointments
+            const appointments = [
+                {
+                    id: 1,
+                    patientName: 'John Doe',
+                    time: '10:00 AM',
+                    status: 'pending'
+                },
+                {
+                    id: 2,
+                    patientName: 'Jane Smith',
+                    time: '11:00 AM',
+                    status: 'pending'
+                },
+                {
+                    id: 3,
+                    patientName: 'Mike Johnson',
+                    time: '2:00 PM',
+                    status: 'pending'
+                }
+            ];
+
+            const appointmentsList = document.getElementById('appointmentsList');
+            appointmentsList.innerHTML = '';
+
+            appointments.forEach(apt => {
+                const aptEl = document.createElement('div');
+                aptEl.className = 'appointment-item';
+                aptEl.onclick = () => startCallWithPatient(apt.id, apt.patientName);
+                
+                aptEl.innerHTML = `
+                    <div class="appointment-time">${apt.time}</div>
+                    <div class="appointment-patient">${apt.patientName}</div>
+                    <span class="status-badge status-${apt.status}">${apt.status.toUpperCase()}</span>
+                `;
+                
+                appointmentsList.appendChild(aptEl);
+            });
+        }
+
+        function startCallWithPatient(patientId, patientName) {
+            currentPatientId = patientId;
+            showNotification(`Starting call with ${patientName}...`, 'success');
+            initializeCall(false);
+        }
+
+        function showCallIncoming(patientName) {
+            showNotification(`Incoming call from ${patientName}`, 'success');
+        }
+
+        // Utility function to show notifications
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+        }
+
+        // Initialize on page load
+        window.addEventListener('load', () => {
+            console.log('Doctor portal loaded');
+        });
+    </script>
+</body>
+</html>

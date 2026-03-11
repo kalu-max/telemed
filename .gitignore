@@ -1,0 +1,37 @@
+# Node / Backend
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.env
+*.env.local
+*.env.development
+*.env.production
+telemedicine_backend/logs/*.log
+telemedicine_backend/*.db
+telemedicine_backend/*.sqlite
+
+# Flutter
+**/build/
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.pub-cache/
+**/.pub/
+**/*.iml
+**/pubspec.lock
+telemedicine_app/android/local.properties
+telemedicine_app/android/.gradle/
+telemedicine_app/ios/Pods/
+telemedicine_app/ios/.symlinks/
+telemedicine_app/doctor_app/android/local.properties
+telemedicine_app/doctor_app/android/.gradle/
+telemedicine_app/doctor_app/ios/Pods/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
