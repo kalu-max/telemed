@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'dart:io';
 import 'package:audioplayers/audioplayers.dart';
 import '../services/messaging_service.dart';
 import '../services/voice_messaging_service.dart';
@@ -12,13 +13,13 @@ import 'dart:async';
 /// Provider for managing messaging state
 class MessagingProvider extends ChangeNotifier {
   final MessagingService messagingService;
-  
+
   final List<ChatMessage> _messages = [];
   final Map<String, Conversation> _conversations = {};
   final Map<String, TypingStatus> _typingStatuses = {};
   final Map<String, DeliveryReceipt> _deliveryReceipts = {};
   final Map<String, ReadReceipt> _readReceipts = {};
-  
+
   bool _isConnected = false;
   late StreamSubscription _messageSubscription;
   late StreamSubscription _typingSubscription;
@@ -41,7 +42,9 @@ class MessagingProvider extends ChangeNotifier {
       notifyListeners();
     });
 
-    _deliverySubscription = messagingService.deliveryReceiptStream.listen((receipt) {
+    _deliverySubscription = messagingService.deliveryReceiptStream.listen((
+      receipt,
+    ) {
       _deliveryReceipts[receipt.messageId] = receipt;
       _updateMessageStatus(receipt.messageId, MessageStatus.delivered);
     });
@@ -51,7 +54,9 @@ class MessagingProvider extends ChangeNotifier {
       _updateMessageStatus(receipt.messageId, MessageStatus.read);
     });
 
-    _connectionSubscription = messagingService.connectionStatusStream.listen((isConnected) {
+    _connectionSubscription = messagingService.connectionStatusStream.listen((
+      isConnected,
+    ) {
       _isConnected = isConnected;
       notifyListeners();
     });
@@ -60,12 +65,14 @@ class MessagingProvider extends ChangeNotifier {
   /// Add message to state
   void addMessage(ChatMessage message) {
     _messages.add(message);
-    
+
     // Update or create conversation
     if (!_conversations.containsKey(message.conversationId)) {
       _conversations[message.conversationId] = Conversation(
         id: message.conversationId,
-        participantId: message.senderId == messagingService.userId ? message.receiverId : message.senderId,
+        participantId: message.senderId == messagingService.userId
+            ? message.receiverId
+            : message.senderId,
         participantName: message.senderName,
         lastMessageTime: message.timestamp,
         lastMessage: message.content,
@@ -75,7 +82,7 @@ class MessagingProvider extends ChangeNotifier {
       conversation.lastMessageTime = message.timestamp;
       conversation.lastMessage = message.content;
     }
-    
+
     notifyListeners();
   }
 
@@ -116,7 +123,9 @@ class MessagingProvider extends ChangeNotifier {
   /// Get all conversations sorted by recent
   List<Conversation> getAllConversations() {
     final conversations = _conversations.values.toList();
-    conversations.sort((a, b) => b.lastMessageTime.compareTo(a.lastMessageTime));
+    conversations.sort(
+      (a, b) => b.lastMessageTime.compareTo(a.lastMessageTime),
+    );
     return conversations;
   }
 
@@ -124,7 +133,7 @@ class MessagingProvider extends ChangeNotifier {
   bool isUserTyping(String userId) {
     final status = _typingStatuses[userId];
     if (status == null) return false;
-    
+
     // Consider typing status expired after 3 seconds
     final ageSinceLastTyping = DateTime.now().difference(status.timestamp);
     return ageSinceLastTyping.inSeconds < 3;
@@ -133,7 +142,11 @@ class MessagingProvider extends ChangeNotifier {
   /// Get unread count for conversation
   int getUnreadCount(String conversationId) {
     return _messages
-        .where((m) => m.conversationId == conversationId && m.status != MessageStatus.read)
+        .where(
+          (m) =>
+              m.conversationId == conversationId &&
+              m.status != MessageStatus.read,
+        )
         .length;
   }
 
@@ -146,7 +159,8 @@ class MessagingProvider extends ChangeNotifier {
 
   bool get isConnected => _isConnected;
   List<ChatMessage> get messages => List.unmodifiable(_messages);
-  Map<String, Conversation> get conversations => Map.unmodifiable(_conversations);
+  Map<String, Conversation> get conversations =>
+      Map.unmodifiable(_conversations);
 
   @override
   void dispose() {
@@ -162,7 +176,7 @@ class MessagingProvider extends ChangeNotifier {
 /// Provider for managing voice messaging
 class VoiceMessagingProvider extends ChangeNotifier {
   final VoiceMessagingService voiceMessagingService;
-  
+
   bool _isRecording = false;
   String? _recordingPath;
   bool _isPlaying = false;
@@ -176,12 +190,16 @@ class VoiceMessagingProvider extends ChangeNotifier {
   }
 
   void _initializeListeners() {
-    _playerStateSubscription = voiceMessagingService.playerStateStream.listen((state) {
+    _playerStateSubscription = voiceMessagingService.playerStateStream.listen((
+      state,
+    ) {
       _isPlaying = state == PlayerState.playing;
       notifyListeners();
     });
 
-    _positionSubscription = voiceMessagingService.positionStream.listen((position) {
+    _positionSubscription = voiceMessagingService.positionStream.listen((
+      position,
+    ) {
       _currentPosition = position;
       notifyListeners();
     });
@@ -197,13 +215,58 @@ class VoiceMessagingProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> stopRecording() async {
+  Future<String> stopRecording() async {
     try {
-      await voiceMessagingService.stopRecording();
+      final audioFile = await voiceMessagingService.stopRecording();
+      _recordingPath = audioFile.path;
       _isRecording = false;
       notifyListeners();
+      return audioFile.path;
     } catch (e) {
       throw Exception('Failed to stop recording: $e');
+    }
+  }
+
+  Future<ChatMessage> sendVoiceMessage({
+    required String conversationId,
+    required String receiverId,
+    required String receiverName,
+    required String audioPath,
+  }) async {
+    try {
+      final voiceMessage = await voiceMessagingService.sendVoiceMessage(
+        conversationId: conversationId,
+        receiverId: receiverId,
+        receiverName: receiverName,
+        audioFile: File(audioPath),
+      );
+
+      final message = ChatMessage(
+        id: voiceMessage.messageId,
+        conversationId: conversationId,
+        senderId: voiceMessagingService.messagingService.userId,
+        senderName: voiceMessagingService.messagingService.userName,
+        receiverId: receiverId,
+        content: 'Voice message',
+        messageType: MessageType.voice,
+        status: MessageStatus.sent,
+        timestamp: DateTime.now(),
+        metadata: {
+          'messageType': 'voice',
+          'voiceMessageId': voiceMessage.id,
+          'audioPath': voiceMessage.audioPath,
+          'duration': voiceMessage.duration.inMilliseconds,
+          'fileSize': voiceMessage.fileSize,
+          'codec': voiceMessage.codec,
+          'bitrate': voiceMessage.bitrate,
+        },
+      );
+
+      _recordingPath = null;
+      notifyListeners();
+      return message;
+    } catch (e) {
+      throw Exception('Failed to send voice message: $e');
     }
   }
 
@@ -253,7 +316,7 @@ class VoiceMessagingProvider extends ChangeNotifier {
 /// Provider for managing video calls
 class VideoCallingProvider extends ChangeNotifier {
   final VideoCallingService videoCallingService;
-  
+
   CallSession? _currentCall;
   VideoQuality _currentVideoQuality = VideoQuality.medium;
   CallStatistics? _lastStats;
@@ -276,7 +339,9 @@ class VideoCallingProvider extends ChangeNotifier {
       notifyListeners();
     });
 
-    _qualitySubscription = videoCallingService.qualityChangeStream.listen((quality) {
+    _qualitySubscription = videoCallingService.qualityChangeStream.listen((
+      quality,
+    ) {
       _currentVideoQuality = quality;
       notifyListeners();
     });
@@ -339,7 +404,7 @@ class VideoCallingProvider extends ChangeNotifier {
 /// Provider for managing network bandwidth
 class NetworkProvider extends ChangeNotifier {
   final BandwidthOptimizationService bandwidthService;
-  
+
   NetworkMetrics? _currentMetrics;
   NetworkType _currentNetworkType = NetworkType.unknown;
   late StreamSubscription _metricsSubscription;
@@ -355,7 +420,9 @@ class NetworkProvider extends ChangeNotifier {
       notifyListeners();
     });
 
-    _networkTypeSubscription = bandwidthService.networkTypeStream.listen((type) {
+    _networkTypeSubscription = bandwidthService.networkTypeStream.listen((
+      type,
+    ) {
       _currentNetworkType = type;
       notifyListeners();
     });
@@ -366,7 +433,7 @@ class NetworkProvider extends ChangeNotifier {
 
   NetworkMetrics? get currentMetrics => _currentMetrics;
   NetworkType get currentNetworkType => _currentNetworkType;
-  
+
   bool get canSupportHDVideo => _currentMetrics?.canSupportHDVideo() ?? false;
   bool get canSupportVideo => _currentMetrics?.canSupportVideo() ?? false;
   bool get canSupportVoice => _currentMetrics?.canSupportVoice() ?? false;

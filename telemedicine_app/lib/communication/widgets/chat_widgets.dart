@@ -128,7 +128,10 @@ class _ChatScreenState extends State<ChatScreen> {
             children: [
               const Padding(
                 padding: EdgeInsets.only(bottom: 8),
-                child: Text('Share', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                child: Text(
+                  'Share',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
               ),
               ListTile(
                 leading: CircleAvatar(
@@ -185,22 +188,24 @@ class _ChatScreenState extends State<ChatScreen> {
 
       if (!mounted) return;
       setState(() => _isSendingAttachment = true);
-      _messagingProvider.messagingService.sendMessage(
-        conversationId: widget.conversationId,
-        receiverId: widget.participantId,
-        receiverName: widget.participantName,
-        content: dataUri,
-        metadata: {'messageType': 'image', 'filename': xfile.name},
-        encrypt: false,
-      ).then((_) {
-        if (mounted) setState(() => _isSendingAttachment = false);
-      });
+      _messagingProvider.messagingService
+          .sendMessage(
+            conversationId: widget.conversationId,
+            receiverId: widget.participantId,
+            receiverName: widget.participantName,
+            content: dataUri,
+            metadata: {'messageType': 'image', 'filename': xfile.name},
+            encrypt: false,
+          )
+          .then((_) {
+            if (mounted) setState(() => _isSendingAttachment = false);
+          });
     } catch (e) {
       if (mounted) {
         setState(() => _isSendingAttachment = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not pick image: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not pick image: $e')));
       }
     }
   }
@@ -217,33 +222,43 @@ class _ChatScreenState extends State<ChatScreen> {
       final bytes = file.bytes;
       if (bytes == null) return;
       final ext = (file.extension ?? '').toLowerCase();
-      final mime = ext == 'pdf' ? 'application/pdf' : 'application/octet-stream';
+      final mime = ext == 'pdf'
+          ? 'application/pdf'
+          : 'application/octet-stream';
       final dataUri = 'data:$mime;base64,${base64Encode(bytes)}';
 
       if (!mounted) return;
       setState(() => _isSendingAttachment = true);
-      _messagingProvider.messagingService.sendMessage(
-        conversationId: widget.conversationId,
-        receiverId: widget.participantId,
-        receiverName: widget.participantName,
-        content: dataUri,
-        metadata: {'messageType': 'file', 'filename': file.name, 'size': bytes.length},
-        encrypt: false,
-      ).then((_) {
-        if (mounted) setState(() => _isSendingAttachment = false);
-      });
+      _messagingProvider.messagingService
+          .sendMessage(
+            conversationId: widget.conversationId,
+            receiverId: widget.participantId,
+            receiverName: widget.participantName,
+            content: dataUri,
+            metadata: {
+              'messageType': 'file',
+              'filename': file.name,
+              'size': bytes.length,
+            },
+            encrypt: false,
+          )
+          .then((_) {
+            if (mounted) setState(() => _isSendingAttachment = false);
+          });
     } catch (e) {
       if (mounted) {
         setState(() => _isSendingAttachment = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not pick file: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not pick file: $e')));
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final isRecording = context.watch<VoiceMessagingProvider>().isRecording;
+
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 0,
@@ -254,7 +269,10 @@ class _ChatScreenState extends State<ChatScreen> {
             children: [
               Text(
                 widget.participantName,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
                 overflow: TextOverflow.ellipsis,
               ),
               Consumer<MessagingProvider>(
@@ -262,10 +280,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   final isTyping = provider.isUserTyping(widget.participantId);
                   return Text(
                     isTyping ? 'typing...' : 'Online',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[600],
-                    ),
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                   );
                 },
               ),
@@ -295,18 +310,16 @@ class _ChatScreenState extends State<ChatScreen> {
           Expanded(
             child: Consumer<MessagingProvider>(
               builder: (context, provider, _) {
-                final messages = provider.getConversationMessages(widget.conversationId);
-                
+                final messages = provider.getConversationMessages(
+                  widget.conversationId,
+                );
+
                 if (messages.isEmpty) {
                   return Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
-                          Icons.message,
-                          size: 64,
-                          color: Colors.grey[300],
-                        ),
+                        Icon(Icons.message, size: 64, color: Colors.grey[300]),
                         const SizedBox(height: 16),
                         Text(
                           'No messages yet',
@@ -363,47 +376,65 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                   ),
                 // Message input
-                Row(
-                  children: [
-                    _isSendingAttachment
-                        ? const Padding(
-                            padding: EdgeInsets.all(12),
-                            child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
-                          )
-                        : IconButton(
-                            icon: const Icon(Icons.attach_file),
-                            tooltip: 'Attachments',
-                            onPressed: _showAttachmentMenu,
-                          ),
-                    Expanded(
-                      child: TextField(
-                        controller: _messageController,
-                        onChanged: _onMessageChanged,
-                        decoration: InputDecoration(
-                          hintText: 'Message...',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(24),
-                            borderSide: BorderSide.none,
-                          ),
-                          filled: true,
-                          fillColor: Colors.grey[100],
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 10,
-                          ),
-                        ),
-                        maxLines: null,
+                if (isRecording)
+                  VoiceRecorderWidget(
+                    conversationId: widget.conversationId,
+                    receiverId: widget.participantId,
+                    receiverName: widget.participantName,
+                  )
+                else
+                  Row(
+                    children: [
+                      _isSendingAttachment
+                          ? const Padding(
+                              padding: EdgeInsets.all(12),
+                              child: SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                            )
+                          : IconButton(
+                              icon: const Icon(Icons.attach_file),
+                              tooltip: 'Attachments',
+                              onPressed: _showAttachmentMenu,
+                            ),
+                      VoiceRecorderWidget(
+                        conversationId: widget.conversationId,
+                        receiverId: widget.participantId,
+                        receiverName: widget.participantName,
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    FloatingActionButton(
-                      mini: true,
-                      onPressed: _sendMessage,
-                      tooltip: 'Send',
-                      child: const Icon(Icons.send),
-                    ),
-                  ],
-                ),
+                      Expanded(
+                        child: TextField(
+                          controller: _messageController,
+                          onChanged: _onMessageChanged,
+                          decoration: InputDecoration(
+                            hintText: 'Message...',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(24),
+                              borderSide: BorderSide.none,
+                            ),
+                            filled: true,
+                            fillColor: Colors.grey[100],
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 10,
+                            ),
+                          ),
+                          maxLines: null,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      FloatingActionButton(
+                        mini: true,
+                        onPressed: _sendMessage,
+                        tooltip: 'Send',
+                        child: const Icon(Icons.send),
+                      ),
+                    ],
+                  ),
               ],
             ),
           ),
@@ -450,14 +481,13 @@ class _ChatScreenState extends State<ChatScreen> {
 class ChatBubble extends StatelessWidget {
   final ChatMessage message;
 
-  const ChatBubble({
-    super.key,
-    required this.message,
-  });
+  const ChatBubble({super.key, required this.message});
 
   @override
   Widget build(BuildContext context) {
-    final isOwn = message.senderId == context.read<MessagingProvider>().messagingService.userId;
+    final isOwn =
+        message.senderId ==
+        context.read<MessagingProvider>().messagingService.userId;
 
     return Align(
       alignment: isOwn ? Alignment.centerRight : Alignment.centerLeft,
@@ -472,8 +502,9 @@ class ChatBubble extends StatelessWidget {
           maxWidth: MediaQuery.of(context).size.width * 0.75,
         ),
         child: Column(
-          crossAxisAlignment:
-              isOwn ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          crossAxisAlignment: isOwn
+              ? CrossAxisAlignment.end
+              : CrossAxisAlignment.start,
           children: [
             _buildMessageContent(isOwn),
             const SizedBox(height: 4),
@@ -503,11 +534,56 @@ class ChatBubble extends StatelessWidget {
     final meta = message.metadata;
     final metaType = meta?['messageType'] as String? ?? '';
 
+    if (metaType == 'voice' || message.messageType == MessageType.voice) {
+      final audioPath = meta?['audioPath']?.toString() ?? '';
+      final durationMs = _readInt(meta?['duration']);
+      final fileSize = _readInt(meta?['fileSize']);
+
+      if (audioPath.isNotEmpty) {
+        return SizedBox(
+          width: 220,
+          child: VoiceMessageWidget(
+            voiceMessage: VoiceMessage(
+              id: meta?['voiceMessageId']?.toString() ?? message.id,
+              messageId: message.id,
+              audioPath: audioPath,
+              duration: Duration(milliseconds: durationMs),
+              fileSize: fileSize,
+              codec: meta?['codec']?.toString() ?? 'opus',
+              bitrate: _readInt(meta?['bitrate']),
+            ),
+            isOwn: isOwn,
+          ),
+        );
+      }
+
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.mic,
+            color: isOwn ? Colors.white : Colors.black87,
+            size: 18,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            'Voice message',
+            style: TextStyle(
+              color: isOwn ? Colors.white : Colors.black87,
+              fontSize: 14,
+            ),
+          ),
+        ],
+      );
+    }
+
     // Image message
     if (metaType == 'image' || message.content.startsWith('data:image/')) {
       try {
         final dataUri = message.content;
-        final base64Data = dataUri.contains(',') ? dataUri.split(',')[1] : dataUri;
+        final base64Data = dataUri.contains(',')
+            ? dataUri.split(',')[1]
+            : dataUri;
         final bytes = base64Decode(base64Data);
         return ClipRRect(
           borderRadius: BorderRadius.circular(8),
@@ -519,7 +595,10 @@ class ChatBubble extends StatelessWidget {
           ),
         );
       } catch (_) {
-        return Text('[Image]', style: TextStyle(color: isOwn ? Colors.white : Colors.black87));
+        return Text(
+          '[Image]',
+          style: TextStyle(color: isOwn ? Colors.white : Colors.black87),
+        );
       }
     }
 
@@ -527,11 +606,17 @@ class ChatBubble extends StatelessWidget {
     if (metaType == 'file' || message.content.startsWith('data:application/')) {
       final filename = meta?['filename'] as String? ?? 'File';
       final size = meta?['size'] as int?;
-      final sizeLabel = size != null ? ' (${(size / 1024).toStringAsFixed(1)} KB)' : '';
+      final sizeLabel = size != null
+          ? ' (${(size / 1024).toStringAsFixed(1)} KB)'
+          : '';
       return Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.insert_drive_file, color: isOwn ? Colors.white : Colors.grey[700], size: 28),
+          Icon(
+            Icons.insert_drive_file,
+            color: isOwn ? Colors.white : Colors.grey[700],
+            size: 28,
+          ),
           const SizedBox(width: 8),
           Flexible(
             child: Column(
@@ -549,7 +634,10 @@ class ChatBubble extends StatelessWidget {
                 if (sizeLabel.isNotEmpty)
                   Text(
                     sizeLabel,
-                    style: TextStyle(color: isOwn ? Colors.white70 : Colors.black54, fontSize: 11),
+                    style: TextStyle(
+                      color: isOwn ? Colors.white70 : Colors.black54,
+                      fontSize: 11,
+                    ),
                   ),
               ],
             ),
@@ -566,6 +654,16 @@ class ChatBubble extends StatelessWidget {
         fontSize: 14,
       ),
     );
+  }
+
+  int _readInt(dynamic value) {
+    if (value is int) {
+      return value;
+    }
+    if (value is num) {
+      return value.toInt();
+    }
+    return int.tryParse(value?.toString() ?? '') ?? 0;
   }
 
   Widget _buildStatusIcon(MessageStatus status) {
@@ -633,7 +731,9 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return const Center(child: CircularProgressIndicator());
                     }
-                    if (snapshot.hasError || !snapshot.hasData || snapshot.data!.isEmpty) {
+                    if (snapshot.hasError ||
+                        !snapshot.hasData ||
+                        snapshot.data!.isEmpty) {
                       return Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
@@ -651,14 +751,17 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
                         final doc = doctors[index];
                         return ListTile(
                           leading: CircleAvatar(
-                            child: Text(doc.name.isNotEmpty ? doc.name[0] : '?'),
+                            child: Text(
+                              doc.name.isNotEmpty ? doc.name[0] : '?',
+                            ),
                           ),
                           title: Text(doc.name),
                           subtitle: Text(doc.specialties.join(', ')),
                           trailing: Text('${doc.rating.toStringAsFixed(1)} ★'),
                           onTap: () {
                             Navigator.pop(context);
-                            final conversationId = 'conv-${doc.id}-${DateTime.now().millisecondsSinceEpoch}';
+                            final conversationId =
+                                'conv-${doc.id}-${DateTime.now().millisecondsSinceEpoch}';
                             Navigator.push(
                               context,
                               MaterialPageRoute(
@@ -727,10 +830,7 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
                   const SizedBox(height: 16),
                   Text(
                     'No conversations yet',
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 16,
-                    ),
+                    style: TextStyle(color: Colors.grey[600], fontSize: 16),
                   ),
                 ],
               ),
@@ -759,10 +859,7 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
 class ConversationTile extends StatelessWidget {
   final Conversation conversation;
 
-  const ConversationTile({
-    super.key,
-    required this.conversation,
-  });
+  const ConversationTile({super.key, required this.conversation});
 
   @override
   Widget build(BuildContext context) {

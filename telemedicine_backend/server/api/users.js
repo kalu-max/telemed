@@ -4,6 +4,7 @@ const path = require('path');
 const multer = require('multer');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { authorizeRole } = require('../middleware/auth');
+const { fetchIceServers } = require('../services/iceServers');
 const logger = require('../utils/logger');
 
 // Lazy accessor so we don't import before the module is initialised
@@ -86,6 +87,23 @@ function ensureArrayMap(map, key) {
   if (!map[key]) map[key] = [];
   return map[key];
 }
+
+// Get RTC ICE/TURN configuration for the current authenticated user.
+router.get('/rtc/ice-servers', asyncHandler(async (req, res) => {
+  const requesterId = req.user?.userId || 'unknown';
+  const iceConfig = await fetchIceServers({ ttlSeconds: req.query.ttl });
+
+  logger.info(
+    `ICE config requested by ${requesterId} using provider ${iceConfig.provider}`,
+  );
+
+  res.json({
+    provider: iceConfig.provider,
+    ttl: iceConfig.ttl,
+    fetchedAt: new Date().toISOString(),
+    iceServers: iceConfig.iceServers,
+  });
+}));
 
 // Get all available doctors
 router.get('/doctors/available', asyncHandler(async (req, res) => {

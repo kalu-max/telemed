@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'under_process.dart';
-import 'activeconsultation.dart';
 import 'profile.dart';
 import 'user_model.dart';
 import 'api_client.dart';
@@ -70,7 +69,8 @@ class _PatientDashboardState extends State<PatientDashboard> {
   }
 
   void _showRescheduleDialog(Map<String, dynamic> appt) {
-    final appointmentId = appt['appointmentId']?.toString() ?? appt['id']?.toString() ?? '';
+    final appointmentId =
+        appt['appointmentId']?.toString() ?? appt['id']?.toString() ?? '';
     DateTime? newDate;
     TimeOfDay? newTime;
     bool isLoading = false;
@@ -78,92 +78,129 @@ class _PatientDashboardState extends State<PatientDashboard> {
     showDialog(
       context: context,
       builder: (ctx) {
-        return StatefulBuilder(builder: (ctx, setDialogState) {
-          return AlertDialog(
-            title: const Text('Reschedule Appointment'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Doctor: ${appt['doctorName'] ?? appt['doctorId'] ?? 'Doctor'}',
-                  style: const TextStyle(fontWeight: FontWeight.w600),
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AlertDialog(
+              title: const Text('Reschedule Appointment'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Doctor: ${appt['doctorName'] ?? appt['doctorId'] ?? 'Doctor'}',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.calendar_today),
+                    label: Text(
+                      newDate == null
+                          ? 'Pick Date'
+                          : '${newDate!.day}/${newDate!.month}/${newDate!.year}',
+                    ),
+                    onPressed: () async {
+                      final picked = await showDatePicker(
+                        context: ctx,
+                        initialDate: DateTime.now().add(
+                          const Duration(days: 1),
+                        ),
+                        firstDate: DateTime.now(),
+                        lastDate: DateTime.now().add(const Duration(days: 90)),
+                      );
+                      if (picked != null) {
+                        setDialogState(() => newDate = picked);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.access_time),
+                    label: Text(
+                      newTime == null ? 'Pick Time' : newTime!.format(ctx),
+                    ),
+                    onPressed: () async {
+                      final picked = await showTimePicker(
+                        context: ctx,
+                        initialTime: TimeOfDay.now(),
+                      );
+                      if (picked != null) {
+                        setDialogState(() => newTime = picked);
+                      }
+                    },
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isLoading ? null : () => Navigator.pop(ctx),
+                  child: const Text('Cancel'),
                 ),
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  icon: const Icon(Icons.calendar_today),
-                  label: Text(newDate == null
-                      ? 'Pick Date'
-                      : '${newDate!.day}/${newDate!.month}/${newDate!.year}'),
-                  onPressed: () async {
-                    final picked = await showDatePicker(
-                      context: ctx,
-                      initialDate: DateTime.now().add(const Duration(days: 1)),
-                      firstDate: DateTime.now(),
-                      lastDate: DateTime.now().add(const Duration(days: 90)),
-                    );
-                    if (picked != null) setDialogState(() => newDate = picked);
-                  },
-                ),
-                const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  icon: const Icon(Icons.access_time),
-                  label: Text(newTime == null
-                      ? 'Pick Time'
-                      : newTime!.format(ctx)),
-                  onPressed: () async {
-                    final picked = await showTimePicker(
-                      context: ctx,
-                      initialTime: TimeOfDay.now(),
-                    );
-                    if (picked != null) setDialogState(() => newTime = picked);
-                  },
+                ElevatedButton(
+                  onPressed:
+                      (isLoading ||
+                          newDate == null ||
+                          newTime == null ||
+                          appointmentId.isEmpty)
+                      ? null
+                      : () async {
+                          setDialogState(() => isLoading = true);
+                          final slotTime = DateTime(
+                            newDate!.year,
+                            newDate!.month,
+                            newDate!.day,
+                            newTime!.hour,
+                            newTime!.minute,
+                          );
+                          final resp = await widget.api!
+                              .updateAppointmentStatus(
+                                appointmentId,
+                                'rescheduled',
+                              );
+                          if (resp.success && widget.api != null) {
+                            await widget.api!.bookAppointment(
+                              doctorId: appt['doctorId']?.toString() ?? '',
+                              slotTime: slotTime,
+                              reason:
+                                  appt['reason']?.toString() ??
+                                  'Rescheduled consultation',
+                            );
+                          }
+                          setDialogState(() => isLoading = false);
+                          if (!ctx.mounted) return;
+                          Navigator.pop(ctx);
+                          _loadAppointments();
+                          final success = resp.success;
+                          final msg = success
+                              ? 'Appointment rescheduled'
+                              : (resp.error ?? 'Could not reschedule');
+                          final color = success ? Colors.green : Colors.red;
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(msg),
+                              backgroundColor: color,
+                            ),
+                          );
+                        },
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.teal),
+                  child: isLoading
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text(
+                          'Confirm',
+                          style: TextStyle(color: Colors.white),
+                        ),
                 ),
               ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: isLoading ? null : () => Navigator.pop(ctx),
-                child: const Text('Cancel'),
-              ),
-              ElevatedButton(
-                onPressed: (isLoading || newDate == null || newTime == null || appointmentId.isEmpty)
-                    ? null
-                    : () async {
-                        setDialogState(() => isLoading = true);
-                        final slotTime = DateTime(
-                          newDate!.year, newDate!.month, newDate!.day,
-                          newTime!.hour, newTime!.minute,
-                        );
-                        final resp = await widget.api!.updateAppointmentStatus(
-                          appointmentId, 'rescheduled');
-                        if (resp.success && widget.api != null) {
-                          await widget.api!.bookAppointment(
-                            doctorId: appt['doctorId']?.toString() ?? '',
-                            slotTime: slotTime,
-                            reason: appt['reason']?.toString() ?? 'Rescheduled consultation',
-                          );
-                        }
-                        setDialogState(() => isLoading = false);
-                        if (!ctx.mounted) return;
-                        Navigator.pop(ctx);
-                        _loadAppointments();
-                        final success = resp.success;
-                        final msg = success ? 'Appointment rescheduled' : (resp.error ?? 'Could not reschedule');
-                        final color = success ? Colors.green : Colors.red;
-                        if (!mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(msg), backgroundColor: color),
-                        );
-                      },
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.teal),
-                child: isLoading
-                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Text('Confirm', style: TextStyle(color: Colors.white)),
-              ),
-            ],
-          );
-        });
+            );
+          },
+        );
       },
     );
   }
@@ -207,7 +244,8 @@ class _PatientDashboardState extends State<PatientDashboard> {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => CalendarScreen(api: widget.api!),
+                            builder: (context) =>
+                                CalendarScreen(api: widget.api!),
                           ),
                         );
                       },
@@ -242,7 +280,9 @@ class _PatientDashboardState extends State<PatientDashboard> {
 
   Widget _buildHeader() {
     final userName = widget.userProfile?.name ?? 'Patient';
-    final userInitial = userName.isNotEmpty ? userName.characters.first.toUpperCase() : 'P';
+    final userInitial = userName.isNotEmpty
+        ? userName.characters.first.toUpperCase()
+        : 'P';
 
     return Row(
       children: [
@@ -251,7 +291,11 @@ class _PatientDashboardState extends State<PatientDashboard> {
           backgroundColor: Colors.blue,
           child: Text(
             userInitial,
-            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ),
         const SizedBox(width: 16),
@@ -332,20 +376,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
             Icons.videocam,
             'Video\nCall',
             isPrimary: true,
-            onTap: () {
-              // Use the unified video call screen from communication module
-              final conversationId = 'conv-doctor-${DateTime.now().millisecondsSinceEpoch}';
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => _buildVideoCallScreen(
-                    recipientId: 'doctor-123',
-                    recipientName: 'Dr. Sarah Johnson',
-                    conversationId: conversationId,
-                  ),
-                ),
-              );
-            },
+            onTap: _startUpcomingAppointmentVideoCall,
           ),
           const SizedBox(width: 16),
           _quickActionCard(
@@ -443,17 +474,19 @@ class _PatientDashboardState extends State<PatientDashboard> {
 
   Widget _buildUpcomingAppointmentCard() {
     // Find the soonest scheduled/pending appointment
-    final upcoming = _appointments.where((a) {
-      final s = a['status']?.toString() ?? '';
-      return s == 'scheduled' || s == 'pending';
-    }).toList()
-      ..sort((a, b) {
-        final da = DateTime.tryParse(a['slotTime']?.toString() ?? '') ??
-            DateTime(2100);
-        final db = DateTime.tryParse(b['slotTime']?.toString() ?? '') ??
-            DateTime(2100);
-        return da.compareTo(db);
-      });
+    final upcoming =
+        _appointments.where((a) {
+          final s = a['status']?.toString() ?? '';
+          return s == 'scheduled' || s == 'pending';
+        }).toList()..sort((a, b) {
+          final da =
+              DateTime.tryParse(a['slotTime']?.toString() ?? '') ??
+              DateTime(2100);
+          final db =
+              DateTime.tryParse(b['slotTime']?.toString() ?? '') ??
+              DateTime(2100);
+          return da.compareTo(db);
+        });
 
     if (upcoming.isEmpty) {
       return Container(
@@ -479,9 +512,14 @@ class _PatientDashboardState extends State<PatientDashboard> {
             ),
             const SizedBox(height: 8),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.teal[700]),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.teal[700],
+              ),
               onPressed: () => Navigator.pushNamed(context, '/search'),
-              child: const Text('Book Now', style: TextStyle(color: Colors.white)),
+              child: const Text(
+                'Book Now',
+                style: TextStyle(color: Colors.white),
+              ),
             ),
           ],
         ),
@@ -489,21 +527,26 @@ class _PatientDashboardState extends State<PatientDashboard> {
     }
 
     final appt = upcoming.first;
-    final doctorName = appt['doctorName']?.toString() ??
-        appt['doctorId']?.toString() ?? 'Doctor';
+    final doctorName =
+        appt['doctorName']?.toString() ??
+        appt['doctorId']?.toString() ??
+        'Doctor';
     final reason = appt['reason']?.toString() ?? 'Consultation';
     final slotRaw = appt['slotTime'];
-    final slotDt = slotRaw != null ? DateTime.tryParse(slotRaw.toString()) : null;
-    final isToday = slotDt != null &&
+    final slotDt = slotRaw != null
+        ? DateTime.tryParse(slotRaw.toString())
+        : null;
+    final isToday =
+        slotDt != null &&
         slotDt.year == DateTime.now().year &&
         slotDt.month == DateTime.now().month &&
         slotDt.day == DateTime.now().day;
     final timeStr = slotDt != null
         ? '${slotDt.hour.toString().padLeft(2, '0')}:${slotDt.minute.toString().padLeft(2, '0')}'
         : '--:--';
-    final dateLabel = isToday ? 'Today' : (slotDt != null
-        ? '${slotDt.day}/${slotDt.month}'
-        : 'Scheduled');
+    final dateLabel = isToday
+        ? 'Today'
+        : (slotDt != null ? '${slotDt.day}/${slotDt.month}' : 'Scheduled');
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -625,15 +668,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
               Expanded(
                 child: ElevatedButton(
                   onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => ActiveConsultationScreen(
-                          doctorName: doctorName,
-                          specialty: appt['specialty']?.toString() ?? '',
-                        ),
-                      ),
-                    );
+                    _joinAppointment(appt);
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.teal[700],
@@ -705,7 +740,12 @@ class _PatientDashboardState extends State<PatientDashboard> {
             m1 != null ? (m1['metric']?.toString() ?? 'Metric') : 'Metric',
             m1 != null ? (m1['value']?.toString() ?? '') : '',
             '',
-            m1 != null ? (DateTime.tryParse(m1['timestamp']?.toString() ?? '')?.toLocal().toString() ?? '') : '',
+            m1 != null
+                ? (DateTime.tryParse(
+                        m1['timestamp']?.toString() ?? '',
+                      )?.toLocal().toString() ??
+                      '')
+                : '',
             Colors.purple,
             isPositive: true,
           ),
@@ -717,7 +757,12 @@ class _PatientDashboardState extends State<PatientDashboard> {
             m2 != null ? (m2['metric']?.toString() ?? 'Metric') : 'Metric',
             m2 != null ? (m2['value']?.toString() ?? '') : '',
             '',
-            m2 != null ? (DateTime.tryParse(m2['timestamp']?.toString() ?? '')?.toLocal().toString() ?? '') : '',
+            m2 != null
+                ? (DateTime.tryParse(
+                        m2['timestamp']?.toString() ?? '',
+                      )?.toLocal().toString() ??
+                      '')
+                : '',
             Colors.green,
             isPositive: true,
           ),
@@ -827,15 +872,17 @@ class _PatientDashboardState extends State<PatientDashboard> {
             context,
             MaterialPageRoute(
               builder: (context) => ProfileScreen(
-                userProfile: widget.userProfile ?? UserProfile(
-                  name: 'Patient',
-                  email: 'user@example.com',
-                  phone: '+1 (555) 000-0000',
-                  dateOfBirth: '01/01/1990',
-                  gender: 'Male',
-                  bloodType: 'O+',
-                  address: 'Update your address',
-                ),
+                userProfile:
+                    widget.userProfile ??
+                    UserProfile(
+                      name: 'Patient',
+                      email: 'user@example.com',
+                      phone: '+1 (555) 000-0000',
+                      dateOfBirth: '01/01/1990',
+                      gender: 'Male',
+                      bloodType: 'O+',
+                      address: 'Update your address',
+                    ),
               ),
             ),
           );
@@ -863,7 +910,8 @@ class _PatientDashboardState extends State<PatientDashboard> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => ProfileScreen(userProfile: widget.userProfile!),
+                  builder: (context) =>
+                      ProfileScreen(userProfile: widget.userProfile!),
                 ),
               );
             }
@@ -894,6 +942,78 @@ class _PatientDashboardState extends State<PatientDashboard> {
         ),
         BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
       ],
+    );
+  }
+
+  Map<String, dynamic>? _getNextCallableAppointment() {
+    final callableAppointments =
+        _appointments.where((appointment) {
+          final status = appointment['status']?.toString() ?? '';
+          final doctorId = appointment['doctorId']?.toString() ?? '';
+          return (status == 'scheduled' || status == 'pending') &&
+              doctorId.isNotEmpty;
+        }).toList()..sort((a, b) {
+          final left =
+              DateTime.tryParse(a['slotTime']?.toString() ?? '') ??
+              DateTime(2100);
+          final right =
+              DateTime.tryParse(b['slotTime']?.toString() ?? '') ??
+              DateTime(2100);
+          return left.compareTo(right);
+        });
+
+    if (callableAppointments.isEmpty) {
+      return null;
+    }
+
+    return callableAppointments.first;
+  }
+
+  void _startUpcomingAppointmentVideoCall() {
+    final appointment = _getNextCallableAppointment();
+    if (appointment == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Book an appointment with a doctor to start a video call.',
+          ),
+        ),
+      );
+      Navigator.pushNamed(context, '/search');
+      return;
+    }
+
+    _joinAppointment(appointment);
+  }
+
+  void _joinAppointment(Map<String, dynamic> appointment) {
+    final doctorId = appointment['doctorId']?.toString() ?? '';
+    if (doctorId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('This appointment is missing doctor details.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final doctorName = appointment['doctorName']?.toString() ?? 'Doctor';
+    final appointmentId =
+        appointment['appointmentId']?.toString() ??
+        appointment['id']?.toString() ??
+        DateTime.now().millisecondsSinceEpoch.toString();
+    final conversationId = 'appointment-$appointmentId';
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => _buildVideoCallScreen(
+          recipientId: doctorId,
+          recipientName: doctorName,
+          conversationId: conversationId,
+        ),
+      ),
     );
   }
 
@@ -936,7 +1056,10 @@ class _LabResultsScreenState extends State<_LabResultsScreen> {
   Future<void> _fetchResults() async {
     setState(() => _loading = true);
     if (widget.api == null) {
-      setState(() { _loading = false; _results = []; });
+      setState(() {
+        _loading = false;
+        _results = [];
+      });
       return;
     }
     try {
@@ -950,10 +1073,16 @@ class _LabResultsScreenState extends State<_LabResultsScreen> {
           _loading = false;
         });
       } else {
-        setState(() { _error = resp.error; _loading = false; });
+        setState(() {
+          _error = resp.error;
+          _loading = false;
+        });
       }
     } catch (e) {
-      setState(() { _error = e.toString(); _loading = false; });
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
     }
   }
 
@@ -968,62 +1097,80 @@ class _LabResultsScreenState extends State<_LabResultsScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? Center(child: Text(_error!, style: const TextStyle(color: Colors.red)))
-              : _results.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.science_outlined, size: 72, color: Colors.teal[200]),
-                          const SizedBox(height: 16),
-                          const Text(
-                            'No lab results on file',
-                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Results from completed consultations will appear here.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: Colors.grey[600]),
-                          ),
-                        ],
-                      ),
-                    )
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: _results.length,
-                      itemBuilder: (context, index) {
-                        final item = _results[index];
-                        final doctorName = item['doctorName']?.toString() ?? 'Doctor';
-                        final raw = item['slotTime'];
-                        final dt = raw != null ? DateTime.tryParse(raw.toString()) : null;
-                        final dateStr = dt != null
-                            ? '${dt.day}/${dt.month}/${dt.year}'
-                            : 'Unknown date';
-                        return Card(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          child: ListTile(
-                            leading: CircleAvatar(
-                              backgroundColor: Colors.teal[50],
-                              child: Icon(Icons.science, color: Colors.teal[700]),
-                            ),
-                            title: Text(item['reason']?.toString() ?? 'Consultation',
-                                style: const TextStyle(fontWeight: FontWeight.w600)),
-                            subtitle: Text('Dr. $doctorName  •  $dateStr'),
-                            trailing: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: Colors.green[50],
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(color: Colors.green[300]!),
-                              ),
-                              child: Text('Completed',
-                                  style: TextStyle(color: Colors.green[700], fontSize: 11)),
-                            ),
-                          ),
-                        );
-                      },
+          ? Center(
+              child: Text(_error!, style: const TextStyle(color: Colors.red)),
+            )
+          : _results.isEmpty
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.science_outlined,
+                    size: 72,
+                    color: Colors.teal[200],
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'No lab results on file',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Results from completed consultations will appear here.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.grey[600]),
+                  ),
+                ],
+              ),
+            )
+          : ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: _results.length,
+              itemBuilder: (context, index) {
+                final item = _results[index];
+                final doctorName = item['doctorName']?.toString() ?? 'Doctor';
+                final raw = item['slotTime'];
+                final dt = raw != null
+                    ? DateTime.tryParse(raw.toString())
+                    : null;
+                final dateStr = dt != null
+                    ? '${dt.day}/${dt.month}/${dt.year}'
+                    : 'Unknown date';
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  child: ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: Colors.teal[50],
+                      child: Icon(Icons.science, color: Colors.teal[700]),
                     ),
+                    title: Text(
+                      item['reason']?.toString() ?? 'Consultation',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: Text('Dr. $doctorName  •  $dateStr'),
+                    trailing: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.green[50],
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.green[300]!),
+                      ),
+                      child: Text(
+                        'Completed',
+                        style: TextStyle(
+                          color: Colors.green[700],
+                          fontSize: 11,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: Colors.teal,
         icon: const Icon(Icons.refresh),

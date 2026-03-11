@@ -68,7 +68,13 @@ NODE_ENV=development
 PORT=5000
 JWT_SECRET=your-secret-key
 FRONTEND_URL=http://localhost:3000
+ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3001
+TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+TWILIO_AUTH_TOKEN=your-twilio-auth-token
 ```
+
+Signaling note:
+- The backend uses a single authoritative Socket.IO signaling handler (`communicationHandler`) to avoid duplicate `offer`, `answer`, and call lifecycle events.
 
 ### 3. Start Server
 
@@ -114,6 +120,7 @@ GET    /api/users/doctors/available    - List available doctors
 GET    /api/users/doctors/:doctorId    - Get doctor profile
 PUT    /api/users/doctors/:doctorId    - Update doctor profile
 DELETE /api/users/doctors/:doctorId    - Delete doctor account (doctors only)
+GET    /api/users/rtc/ice-servers      - Get short-lived RTC ICE/TURN config
 
 // notifications
 GET    /api/users/notifications        - Get notifications for current user
@@ -135,7 +142,7 @@ GET    /api/metrics/user/stats             - Get user statistics
 GET    /api/metrics/network/performance    - Get network analytics
 ```
 
-### WebSocket Events (Socket.io /video namespace)
+### WebSocket Events (Socket.io default namespace)
 
 #### Client -> Server
 ```
@@ -309,6 +316,21 @@ final videoService = EnhancedVideoCallService(
   authToken: 'your-jwt-token',
 );
 ```
+
+### TURN/ICE Setup For Mobile Apps
+
+1. Provision a TURN service (for example: Coturn or Twilio Network Traversal).
+2. Set `TWILIO_ACCOUNT_SID` and `TWILIO_AUTH_TOKEN` on the backend to enable short-lived TURN credentials at `/api/users/rtc/ice-servers`.
+3. The mobile apps will fetch fresh ICE/TURN config after login when the backend is configured.
+4. You can still pass websocket and static ICE config with `--dart-define` as a fallback.
+5. Keep at least one STUN entry as fallback.
+
+Example (PowerShell):
+```powershell
+flutter run --dart-define=API_BASE_URL=https://api.example.com --dart-define=WS_BASE_URL=wss://api.example.com --dart-define=ICE_SERVERS_JSON='[{"urls":["stun:stun.l.google.com:19302"]},{"urls":"turn:turn.example.com:3478?transport=udp","username":"turn-user","credential":"turn-password"}]'
+```
+
+`ICE_SERVERS_JSON` must be a JSON array of RTC ICE server objects. If omitted or invalid, the apps fall back to built-in Google STUN servers.
 
 ## 🧪 Testing
 

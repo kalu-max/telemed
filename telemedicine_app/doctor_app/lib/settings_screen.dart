@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'api_client.dart';
 import 'user_storage_service.dart';
 import 'config/app_config.dart';
+import 'config/server_config.dart';
 
 class SettingsScreen extends StatefulWidget {
   final TeleMedicineApiClient api;
@@ -38,6 +39,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('notifications_enabled', value);
     setState(() => _notificationsEnabled = value);
+  }
+
+  Future<void> _saveServerUrl() async {
+    final normalizedUrl = ServerConfig.normalizeUrl(_urlController.text);
+    await ServerConfig.saveApiBaseUrl(normalizedUrl);
+    if (!mounted) {
+      return;
+    }
+
+    setState(() => _serverUrl = normalizedUrl);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Server URL saved. Sign out and sign in again to apply it everywhere.'),
+      ),
+    );
   }
 
   @override
@@ -154,6 +170,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   Text(
                     'Change this to your backend server address for mobile use',
                     style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  ),
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: ElevatedButton.icon(
+                      onPressed: _saveServerUrl,
+                      icon: const Icon(Icons.save),
+                      label: const Text('Save'),
+                    ),
                   ),
                 ],
               ),

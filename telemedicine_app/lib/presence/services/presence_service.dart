@@ -58,6 +58,7 @@ class PresenceService {
       _socket = io.io(serverUrl, <String, dynamic>{
         'transports': ['websocket', 'polling'],
         'autoConnect': true,
+        'query': {'userId': userId, 'role': userRole},
         'reconnection': true,
         'reconnectionDelay': 1000,
         'reconnectionDelayMax': 5000,
@@ -68,6 +69,7 @@ class PresenceService {
       _socket.on('connect', (_) {
         _isConnected = true;
         _connectionStatusController.add(true);
+        _socket.emit('user:online', {'userId': userId, 'role': userRole});
         _socket.emit('authenticate', {
           'userId': userId,
           'userRole': userRole,

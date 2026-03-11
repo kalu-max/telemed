@@ -1,5 +1,7 @@
 import 'package:socket_io_client/socket_io_client.dart' as io;
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 import 'package:uuid/uuid.dart';
 import '../models/message_model.dart';
 import '../utils/encryption_service.dart';
@@ -10,29 +12,38 @@ class MessagingService {
   final String serverUrl;
   String userId;
   String userName;
-  
+  String role;
+
   late io.Socket socket;
   late EncryptionService _encryptionService;
   late OfflineMessageQueueService _offlineQueue;
   late MessageRetryService _retryService;
-  
-  final StreamController<ChatMessage> _messageController = StreamController<ChatMessage>.broadcast();
-  final StreamController<String> _typingIndicatorController = StreamController<String>.broadcast();
-  final StreamController<TypingStatus> _typingStatusController = StreamController<TypingStatus>.broadcast();
-  final StreamController<DeliveryReceipt> _deliveryReceiptController = StreamController<DeliveryReceipt>.broadcast();
-  final StreamController<ReadReceipt> _readReceiptController = StreamController<ReadReceipt>.broadcast();
-  final StreamController<bool> _connectionStatusController = StreamController<bool>.broadcast();
-  
+
+  final StreamController<ChatMessage> _messageController =
+      StreamController<ChatMessage>.broadcast();
+  final StreamController<String> _typingIndicatorController =
+      StreamController<String>.broadcast();
+  final StreamController<TypingStatus> _typingStatusController =
+      StreamController<TypingStatus>.broadcast();
+  final StreamController<DeliveryReceipt> _deliveryReceiptController =
+      StreamController<DeliveryReceipt>.broadcast();
+  final StreamController<ReadReceipt> _readReceiptController =
+      StreamController<ReadReceipt>.broadcast();
+  final StreamController<bool> _connectionStatusController =
+      StreamController<bool>.broadcast();
+
   bool _isConnected = false;
+  bool _isInitialized = false;
   final Map<String, String> _encryptionKeys = {};
   final Map<String, DateTime> _typingTimestamps = {};
-  
+
   final uuid = const Uuid();
 
   MessagingService({
     required this.serverUrl,
     required this.userId,
     required this.userName,
+    this.role = 'patient',
   }) {
     _encryptionService = EncryptionService();
     _offlineQueue = OfflineMessageQueueService();
@@ -41,22 +52,63 @@ class MessagingService {
 
   /// Initialize messaging service
   Future<void> initialize() async {
+    if (_isInitialized) {
+      return;
+    }
+
     try {
       await _offlineQueue.initialize();
-      
-      socket = io.io(
-        serverUrl,
-        <String, dynamic>{
-          'transports': ['websocket'],
-          'autoConnect': false,
-        },
-      );
+
+      _createSocket();
 
       _setupSocketListeners();
+      _isInitialized = true;
       await connect();
     } catch (e) {
       throw Exception('Failed to initialize messaging service: $e');
     }
+  }
+
+  Future<void> updateSession({
+    required String userId,
+    required String userName,
+    String role = 'patient',
+  }) async {
+    final nextUserId = userId.trim().isEmpty ? 'guest' : userId.trim();
+    final nextUserName = userName.trim().isEmpty ? 'Patient' : userName.trim();
+    final nextRole = role.trim().isEmpty ? 'patient' : role.trim();
+
+    final identityChanged =
+        this.userId != nextUserId ||
+        this.userName != nextUserName ||
+        this.role != nextRole;
+
+    this.userId = nextUserId;
+    this.userName = nextUserName;
+    this.role = nextRole;
+
+    if (!_isInitialized) {
+      await initialize();
+      return;
+    }
+
+    if (!identityChanged) {
+      return;
+    }
+
+    await disconnect();
+    socket.dispose();
+    _createSocket();
+    _setupSocketListeners();
+    await connect();
+  }
+
+  void _createSocket() {
+    socket = io.io(serverUrl, <String, dynamic>{
+      'transports': ['websocket'],
+      'autoConnect': false,
+      'query': {'userId': userId, 'role': role},
+    });
   }
 
   /// Setup socket event listeners
@@ -64,7 +116,13 @@ class MessagingService {
     socket.on('connect', (_) {
       _isConnected = true;
       _connectionStatusController.add(true);
+      socket.emit('user:online', {'userId': userId, 'role': role});
       _syncOfflineMessages();
+    });
+
+    socket.on('connect_error', (_) {
+      _isConnected = false;
+      _connectionStatusController.add(false);
     });
 
     socket.on('disconnect', (_) {
@@ -74,6 +132,10 @@ class MessagingService {
 
     socket.on('message', (data) {
       _handleIncomingMessage(data);
+    });
+
+    socket.on('voiceMessage', (data) {
+      _handleIncomingVoiceMessage(data);
     });
 
     socket.on('typing', (data) {
@@ -96,7 +158,7 @@ class MessagingService {
   /// Connect to messaging server
   Future<void> connect() async {
     if (_isConnected) return;
-    
+
     try {
       socket.connect();
       await Future.delayed(const Duration(seconds: 1));
@@ -107,9 +169,10 @@ class MessagingService {
 
   /// Disconnect from server
   Future<void> disconnect() async {
-    if (!_isConnected) return;
+    if (!_isInitialized) return;
     socket.disconnect();
     _isConnected = false;
+    _connectionStatusController.add(false);
   }
 
   /// Send a text message
@@ -134,7 +197,9 @@ class MessagingService {
       timestamp: DateTime.now(),
       metadata: metadata,
       encryptionKey: _encryptionKeys[receiverId],
-      encryptionStatus: encrypt ? EncryptionStatus.encrypted : EncryptionStatus.unencrypted,
+      encryptionStatus: encrypt
+          ? EncryptionStatus.encrypted
+          : EncryptionStatus.unencrypted,
     );
 
     try {
@@ -176,17 +241,77 @@ class MessagingService {
   void _handleIncomingMessage(dynamic data) {
     try {
       final message = ChatMessage.fromJson(data);
-      
+
       // Decrypt if needed
       if (message.encryptionStatus == EncryptionStatus.encrypted &&
           _encryptionKeys.containsKey(message.senderId)) {
         _decryptMessageAsync(message);
       }
-      
+
       _messageController.add(message);
     } catch (e) {
       // Error handled: failed to process incoming message
     }
+  }
+
+  /// Handle incoming voice messages
+  void _handleIncomingVoiceMessage(dynamic data) async {
+    try {
+      final payload = Map<String, dynamic>.from(data as Map);
+      final audioPath = await _persistIncomingVoiceMessage(
+        messageId: payload['id']?.toString() ?? uuid.v4(),
+        audioData: payload['audioData']?.toString() ?? '',
+        codec: payload['codec']?.toString() ?? 'opus',
+      );
+
+      final message = ChatMessage(
+        id: payload['id']?.toString() ?? uuid.v4(),
+        conversationId: payload['conversationId']?.toString() ?? '',
+        senderId: payload['senderId']?.toString() ?? '',
+        senderName:
+            payload['senderName']?.toString() ??
+            payload['senderId']?.toString() ??
+            'Unknown',
+        receiverId: payload['receiverId']?.toString() ?? userId,
+        content: 'Voice message',
+        messageType: MessageType.voice,
+        status: MessageStatus.delivered,
+        timestamp:
+            DateTime.tryParse(payload['timestamp']?.toString() ?? '') ??
+            DateTime.now(),
+        metadata: {
+          'messageType': 'voice',
+          'audioPath': audioPath,
+          'duration': payload['duration'],
+          'fileSize': payload['fileSize'],
+          'codec': payload['codec'],
+          'bitrate': payload['bitrate'],
+        },
+      );
+
+      _messageController.add(message);
+      sendDeliveryReceipt(message.id, message.senderId);
+    } catch (e) {
+      // Error handled: failed to process incoming voice message
+    }
+  }
+
+  Future<String> _persistIncomingVoiceMessage({
+    required String messageId,
+    required String audioData,
+    required String codec,
+  }) async {
+    if (audioData.isEmpty) {
+      throw Exception('Missing audio payload');
+    }
+
+    final bytes = base64Decode(audioData);
+    final extension = codec == 'wav' ? 'wav' : 'opus';
+    final file = File(
+      '${Directory.systemTemp.path}/incoming_voice_$messageId.$extension',
+    );
+    await file.writeAsBytes(bytes, flush: true);
+    return file.path;
   }
 
   /// Decrypt message asynchronously
@@ -288,7 +413,7 @@ class MessagingService {
   Future<void> _syncOfflineMessages() async {
     try {
       final queuedMessages = await _offlineQueue.syncQueue();
-      
+
       for (final message in queuedMessages) {
         socket.emit('syncMessage', message.toJson());
       }
@@ -304,7 +429,8 @@ class MessagingService {
   Stream<TypingStatus> get typingStatusStream => _typingStatusController.stream;
 
   /// Get delivery receipt stream
-  Stream<DeliveryReceipt> get deliveryReceiptStream => _deliveryReceiptController.stream;
+  Stream<DeliveryReceipt> get deliveryReceiptStream =>
+      _deliveryReceiptController.stream;
 
   /// Get read receipt stream
   Stream<ReadReceipt> get readReceiptStream => _readReceiptController.stream;
@@ -318,6 +444,9 @@ class MessagingService {
   /// Cleanup
   Future<void> dispose() async {
     await disconnect();
+    if (_isInitialized) {
+      socket.dispose();
+    }
     _messageController.close();
     _typingIndicatorController.close();
     _typingStatusController.close();
@@ -346,12 +475,14 @@ class TypingStatus {
   });
 
   factory TypingStatus.fromJson(Map<String, dynamic> json) => TypingStatus(
-        conversationId: json['conversationId'] ?? '',
-        senderId: json['senderId'] ?? '',
-        senderName: json['senderName'] ?? '',
-        recipientId: json['recipientId'] ?? '',
-        timestamp: DateTime.parse(json['timestamp'] ?? DateTime.now().toIso8601String()),
-      );
+    conversationId: json['conversationId'] ?? '',
+    senderId: json['senderId'] ?? '',
+    senderName: json['senderName'] ?? '',
+    recipientId: json['recipientId'] ?? '',
+    timestamp: DateTime.parse(
+      json['timestamp'] ?? DateTime.now().toIso8601String(),
+    ),
+  );
 }
 
 /// Model for delivery receipt
@@ -368,11 +499,14 @@ class DeliveryReceipt {
     required this.timestamp,
   });
 
-  factory DeliveryReceipt.fromJson(Map<String, dynamic> json) => DeliveryReceipt(
+  factory DeliveryReceipt.fromJson(Map<String, dynamic> json) =>
+      DeliveryReceipt(
         messageId: json['messageId'] ?? '',
         senderId: json['senderId'] ?? '',
         receiverId: json['receiverId'] ?? '',
-        timestamp: DateTime.parse(json['timestamp'] ?? DateTime.now().toIso8601String()),
+        timestamp: DateTime.parse(
+          json['timestamp'] ?? DateTime.now().toIso8601String(),
+        ),
       );
 }
 
@@ -391,9 +525,11 @@ class ReadReceipt {
   });
 
   factory ReadReceipt.fromJson(Map<String, dynamic> json) => ReadReceipt(
-        messageId: json['messageId'] ?? '',
-        senderId: json['senderId'] ?? '',
-        receiverId: json['receiverId'] ?? '',
-        timestamp: DateTime.parse(json['timestamp'] ?? DateTime.now().toIso8601String()),
-      );
+    messageId: json['messageId'] ?? '',
+    senderId: json['senderId'] ?? '',
+    receiverId: json['receiverId'] ?? '',
+    timestamp: DateTime.parse(
+      json['timestamp'] ?? DateTime.now().toIso8601String(),
+    ),
+  );
 }

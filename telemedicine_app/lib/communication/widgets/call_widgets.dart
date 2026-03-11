@@ -94,7 +94,9 @@ class _VoiceMessageWidgetState extends State<VoiceMessageWidget> {
                         Text(
                           'Opus • $fileSize',
                           style: TextStyle(
-                            color: widget.isOwn ? Colors.white70 : Colors.black54,
+                            color: widget.isOwn
+                                ? Colors.white70
+                                : Colors.black54,
                             fontSize: 10,
                           ),
                         ),
@@ -108,13 +110,15 @@ class _VoiceMessageWidgetState extends State<VoiceMessageWidget> {
                   child: LinearProgressIndicator(
                     value: widget.voiceMessage.duration.inSeconds > 0
                         ? (context
-                                .watch<VoiceMessagingProvider>()
-                                .currentPosition
-                                .inMilliseconds /
-                            widget.voiceMessage.duration.inMilliseconds)
+                                  .watch<VoiceMessagingProvider>()
+                                  .currentPosition
+                                  .inMilliseconds /
+                              widget.voiceMessage.duration.inMilliseconds)
                         : 0,
                     minHeight: 2,
-                    backgroundColor: widget.isOwn ? Colors.white30 : Colors.black12,
+                    backgroundColor: widget.isOwn
+                        ? Colors.white30
+                        : Colors.black12,
                     valueColor: AlwaysStoppedAnimation<Color>(
                       widget.isOwn ? Colors.white : Colors.teal[600]!,
                     ),
@@ -168,16 +172,16 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> {
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
 
   void _stopRecording() async {
     try {
       _recordingTimer.cancel();
-      await _voiceProvider.stopRecording();
+      final recordingPath = await _voiceProvider.stopRecording();
 
       if (mounted) {
         showDialog(
@@ -186,6 +190,7 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> {
             conversationId: widget.conversationId,
             receiverId: widget.receiverId,
             receiverName: widget.receiverName,
+            recordingPath: recordingPath,
             duration: _recordingDuration,
           ),
         );
@@ -198,9 +203,9 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> {
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
 
@@ -240,10 +245,7 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> {
                 ),
                 Text(
                   '${_recordingDuration.inMinutes}:${(_recordingDuration.inSeconds % 60).toString().padLeft(2, '0')}',
-                  style: TextStyle(
-                    color: Colors.red[600],
-                    fontSize: 10,
-                  ),
+                  style: TextStyle(color: Colors.red[600], fontSize: 10),
                 ),
               ],
             ),
@@ -268,18 +270,62 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> {
 }
 
 /// Voice preview dialog
-class _VoicePreviewDialog extends StatelessWidget {
+class _VoicePreviewDialog extends StatefulWidget {
   final String conversationId;
   final String receiverId;
   final String receiverName;
+  final String recordingPath;
   final Duration duration;
 
   const _VoicePreviewDialog({
     required this.conversationId,
     required this.receiverId,
     required this.receiverName,
+    required this.recordingPath,
     required this.duration,
   });
+
+  @override
+  State<_VoicePreviewDialog> createState() => _VoicePreviewDialogState();
+}
+
+class _VoicePreviewDialogState extends State<_VoicePreviewDialog> {
+  bool _isSending = false;
+
+  Future<void> _sendVoiceMessage() async {
+    if (_isSending) {
+      return;
+    }
+
+    setState(() => _isSending = true);
+
+    try {
+      final voiceProvider = context.read<VoiceMessagingProvider>();
+      final messagingProvider = context.read<MessagingProvider>();
+      final message = await voiceProvider.sendVoiceMessage(
+        conversationId: widget.conversationId,
+        receiverId: widget.receiverId,
+        receiverName: widget.receiverName,
+        audioPath: widget.recordingPath,
+      );
+      messagingProvider.addMessage(message);
+
+      if (!mounted) {
+        return;
+      }
+
+      Navigator.pop(context, true);
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to send voice message: $e')),
+      );
+      setState(() => _isSending = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -288,29 +334,31 @@ class _VoicePreviewDialog extends StatelessWidget {
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            Icons.mic,
-            size: 48,
-            color: Colors.teal[600],
-          ),
+          Icon(Icons.mic, size: 48, color: Colors.teal[600]),
           const SizedBox(height: 16),
           Text(
-            'Duration: ${duration.inSeconds}s',
+            'Duration: ${widget.duration.inSeconds}s',
             style: const TextStyle(fontSize: 14),
           ),
         ],
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context),
+          onPressed: _isSending ? null : () => Navigator.pop(context),
           child: const Text('Cancel'),
         ),
         ElevatedButton(
-          onPressed: () {
-            // Send voice message
-            Navigator.pop(context);
-          },
-          child: const Text('Send'),
+          onPressed: _isSending ? null : _sendVoiceMessage,
+          child: _isSending
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Text('Send'),
         ),
       ],
     );
@@ -322,12 +370,14 @@ class VideoCallScreen extends StatefulWidget {
   final String recipientId;
   final String recipientName;
   final String conversationId;
+  final bool isIncoming;
 
   const VideoCallScreen({
     super.key,
     required this.recipientId,
     required this.recipientName,
     required this.conversationId,
+    this.isIncoming = false,
   });
 
   @override
@@ -342,11 +392,16 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
   String? _errorMessage;
   Duration _callDuration = Duration.zero;
   Timer? _durationTimer;
+  bool _hasClosedForEndedCall = false;
 
   @override
   void initState() {
     super.initState();
-    _initializeCall();
+    if (widget.isIncoming) {
+      _isInitializing = false;
+    } else {
+      _initializeCall();
+    }
   }
 
   Future<void> _initializeCall() async {
@@ -358,7 +413,6 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
       );
       if (mounted) {
         setState(() => _isInitializing = false);
-        _startDurationTimer();
       }
     } catch (e) {
       if (mounted) {
@@ -371,9 +425,35 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
   }
 
   void _startDurationTimer() {
+    _durationTimer?.cancel();
     _durationTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) {
         setState(() => _callDuration += const Duration(seconds: 1));
+      }
+    });
+  }
+
+  void _maybeStartDurationTimer(CallStatus? status) {
+    if (status == CallStatus.connected && _durationTimer == null) {
+      _startDurationTimer();
+    }
+  }
+
+  void _handleTerminalCallState(CallStatus? status) {
+    const terminalStatuses = <CallStatus>{
+      CallStatus.disconnected,
+      CallStatus.rejected,
+      CallStatus.failed,
+      CallStatus.ended,
+    };
+    if (_hasClosedForEndedCall || !terminalStatuses.contains(status)) {
+      return;
+    }
+
+    _hasClosedForEndedCall = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
       }
     });
   }
@@ -482,6 +562,8 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
         builder: (context, videoProvider, _) {
           final service = videoProvider.videoCallingService;
           final callStatus = videoProvider.currentCall?.status;
+          _maybeStartDurationTimer(callStatus);
+          _handleTerminalCallState(callStatus);
 
           return Stack(
             fit: StackFit.expand,
@@ -557,7 +639,8 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
                       child: RTCVideoView(
                         service.localRenderer,
                         mirror: _isFrontCamera,
-                        objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                        objectFit:
+                            RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
                       ),
                     ),
                   ),
@@ -622,15 +705,22 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(
-                                  _qualityIcon(videoProvider.currentVideoQuality),
-                                  color: _qualityColor(videoProvider.currentVideoQuality),
+                                  _qualityIcon(
+                                    videoProvider.currentVideoQuality,
+                                  ),
+                                  color: _qualityColor(
+                                    videoProvider.currentVideoQuality,
+                                  ),
                                   size: 14,
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
-                                  videoProvider.currentVideoQuality.name.toUpperCase(),
+                                  videoProvider.currentVideoQuality.name
+                                      .toUpperCase(),
                                   style: TextStyle(
-                                    color: _qualityColor(videoProvider.currentVideoQuality),
+                                    color: _qualityColor(
+                                      videoProvider.currentVideoQuality,
+                                    ),
                                     fontSize: 11,
                                     fontWeight: FontWeight.w600,
                                   ),
@@ -762,13 +852,15 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
           backgroundColor: isEndCall
               ? Colors.red
               : isActive
-                  ? Colors.white24
-                  : Colors.white.withValues(alpha: 0.15),
+              ? Colors.white24
+              : Colors.white.withValues(alpha: 0.15),
           elevation: 0,
           mini: !isEndCall,
           child: Icon(
             icon,
-            color: isEndCall ? Colors.white : (isActive ? Colors.white : Colors.white54),
+            color: isEndCall
+                ? Colors.white
+                : (isActive ? Colors.white : Colors.white54),
           ),
         ),
         const SizedBox(height: 6),

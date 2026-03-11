@@ -43,6 +43,10 @@
 	</array>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Camera access is required for video consultations with your doctor.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Microphone access is required for audio during video consultations.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 </dict>

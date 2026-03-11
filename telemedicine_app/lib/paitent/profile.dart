@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+
+import '../services/user_storage_service.dart';
+import 'login.dart';
 import 'user_model.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -15,6 +18,7 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   bool _isEditing = false;
+  bool _isLoggingOut = false;
 
   late TextEditingController _nameController;
   late TextEditingController _emailController;
@@ -207,13 +211,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
-                      onPressed: () {
-                        // Logout logic
-                        Navigator.of(context).pushNamedAndRemoveUntil(
-                          '/login',
-                          (route) => false,
-                        );
-                      },
+                      onPressed: _isLoggingOut ? null : _handleLogout,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.red[600],
                         padding: const EdgeInsets.symmetric(vertical: 14),
@@ -221,10 +219,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           borderRadius: BorderRadius.circular(8),
                         ),
                       ),
-                      icon: const Icon(Icons.logout, color: Colors.white),
-                      label: const Text(
-                        'Logout',
-                        style: TextStyle(
+                      icon: _isLoggingOut
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Icon(Icons.logout, color: Colors.white),
+                      label: Text(
+                        _isLoggingOut ? 'Signing Out...' : 'Logout',
+                        style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
                         ),
@@ -239,6 +246,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _handleLogout() async {
+    setState(() => _isLoggingOut = true);
+
+    try {
+      await UserStorageService.clearUserData();
+
+      if (!mounted) {
+        return;
+      }
+
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (route) => false,
+      );
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() => _isLoggingOut = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Logout failed: $e')),
+      );
+    }
   }
 
   Widget _buildProfileHeader() {

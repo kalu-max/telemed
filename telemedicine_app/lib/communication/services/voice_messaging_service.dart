@@ -2,8 +2,8 @@ import 'dart:io';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:record/record.dart';
 import 'package:uuid/uuid.dart';
-import 'package:archive/archive.dart';
 import '../models/message_model.dart';
 import 'messaging_service.dart';
 
@@ -11,10 +11,11 @@ import 'messaging_service.dart';
 class VoiceMessagingService {
   final MessagingService messagingService;
   final AudioPlayer _player = AudioPlayer();
-  
+  final AudioRecorder _recorder = AudioRecorder();
+
   String? _recordingPath;
   bool _isRecording = false;
-  
+
   final uuid = const Uuid();
 
   VoiceMessagingService({required this.messagingService});
@@ -22,10 +23,26 @@ class VoiceMessagingService {
   /// Start recording voice message
   Future<String> startRecording() async {
     try {
-      final dir = Directory.systemTemp;
-      _recordingPath = '${dir.path}/voice_${uuid.v4()}.wav';
+      final hasPermission = await _recorder.hasPermission();
+      if (!hasPermission) {
+        throw Exception('Microphone permission denied');
+      }
 
-      // Recording preparation - actual recording handled by platform channels
+      final dir = Directory.systemTemp;
+      _recordingPath = '${dir.path}/voice_${uuid.v4()}.opus';
+
+      await _recorder.start(
+        const RecordConfig(
+          encoder: AudioEncoder.opus,
+          bitRate: 24000,
+          sampleRate: 16000,
+          numChannels: 1,
+          echoCancel: true,
+          noiseSuppress: true,
+        ),
+        path: _recordingPath!,
+      );
+
       _isRecording = true;
       return _recordingPath!;
     } catch (e) {
@@ -39,41 +56,24 @@ class VoiceMessagingService {
       if (_recordingPath == null) {
         throw Exception('No recording in progress');
       }
+
+      final resolvedPath = await _recorder.stop();
       _isRecording = false;
 
-      final audioFile = File(_recordingPath!);
-      
-      // Compress using archive library as fallback
-      if (Platform.isAndroid || Platform.isIOS) {
-        return await _optimizeAudioFile(audioFile);
+      final outputPath = resolvedPath ?? _recordingPath;
+      if (outputPath == null || outputPath.isEmpty) {
+        throw Exception('Recording did not produce an audio file');
       }
 
+      final audioFile = File(outputPath);
+      if (!await audioFile.exists()) {
+        throw Exception('Recorded audio file could not be found');
+      }
+
+      _recordingPath = audioFile.path;
       return audioFile;
     } catch (e) {
       throw Exception('Failed to stop recording: $e');
-    }
-  }
-
-  /// Optimize audio file size using compression
-  Future<File> _optimizeAudioFile(File audioFile) async {
-    try {
-      final bytes = await audioFile.readAsBytes();
-      
-      // Simulate Opus compression - in production, use actual Opus encoder
-      // Opus typically compresses to 25-50% of original WAV size
-      final compressed = GZipEncoder().encode(bytes);
-      
-      final compressedPath = audioFile.path.replaceAll('.wav', '.opus');
-      final compressedFile = File(compressedPath);
-      await compressedFile.writeAsBytes(compressed ?? bytes);
-      
-      // Delete original
-      await audioFile.delete();
-      
-      return compressedFile;
-    } catch (e) {
-      // Return original if compression fails
-      return audioFile;
     }
   }
 
@@ -88,7 +88,7 @@ class VoiceMessagingService {
       final voiceMessageId = uuid.v4();
       final audioBytes = await audioFile.readAsBytes();
       final fileSize = audioBytes.length;
-      
+
       // Calculate duration from audio metadata
       // In production, use proper audio analysis library
       final duration = Duration(
@@ -113,12 +113,14 @@ class VoiceMessagingService {
         senderId: messagingService.userId,
         senderName: messagingService.userName,
         receiverId: receiverId,
-        content: voiceMessage.id,
+        content: 'Voice message',
         messageType: MessageType.voice,
         status: MessageStatus.sending,
         timestamp: DateTime.now(),
         metadata: {
+          'messageType': 'voice',
           'voiceMessageId': voiceMessageId,
+          'audioPath': voiceMessage.audioPath,
           'duration': duration.inMilliseconds,
           'fileSize': fileSize,
           'codec': 'opus',
@@ -131,6 +133,7 @@ class VoiceMessagingService {
         'messageId': chatMessage.id,
         'conversationId': conversationId,
         'senderId': messagingService.userId,
+        'senderName': messagingService.userName,
         'receiverId': receiverId,
         'audioData': _encodeAudioForTransmission(audioBytes),
         'duration': duration.inMilliseconds,
@@ -195,8 +198,9 @@ class VoiceMessagingService {
   /// Cleanup
   Future<void> dispose() async {
     if (_isRecording) {
-      await stopRecording();
+      await _recorder.cancel();
     }
     await _player.dispose();
+    await _recorder.dispose();
   }
 }

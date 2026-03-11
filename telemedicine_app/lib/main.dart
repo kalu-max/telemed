@@ -17,10 +17,11 @@ import 'communication/services/messaging_service.dart';
 import 'communication/services/voice_messaging_service.dart';
 import 'communication/services/video_calling_service.dart';
 import 'communication/services/bandwidth_optimization_service.dart';
+import 'communication/widgets/incoming_call_listener.dart';
 import 'config/app_config.dart';
 
 const String backendServerUrl = AppConfig.apiBaseUrl;
-const String webSocketServerUrl = AppConfig.apiBaseUrl;
+const String webSocketServerUrl = AppConfig.wsBaseUrl;
 
 void main() {
   runApp(const MediCareApp());
@@ -37,12 +38,10 @@ class MediCareApp extends StatelessWidget {
       providers: [
         // API Client - for REST calls
         Provider<TeleMedicineApiClient>(create: (_) => apiClient),
-        
+
         // Doctor Service - for finding and managing doctors
-        ChangeNotifierProvider(
-          create: (_) => DoctorService(apiClient),
-        ),
-        
+        ChangeNotifierProvider(create: (_) => DoctorService(apiClient)),
+
         // Messaging Service - for real-time chat with websocket
         ProxyProvider<TeleMedicineApiClient, MessagingService>(
           create: (context) {
@@ -67,7 +66,7 @@ class MediCareApp extends StatelessWidget {
             );
           },
         ),
-        
+
         // Messaging Provider - state management for messages
         ChangeNotifierProxyProvider<MessagingService, MessagingProvider>(
           create: (context) => MessagingProvider(
@@ -75,12 +74,10 @@ class MediCareApp extends StatelessWidget {
           ),
           update: (context, messagingService, previousMessagingProvider) {
             previousMessagingProvider?.dispose();
-            return MessagingProvider(
-              messagingService: messagingService,
-            );
+            return MessagingProvider(messagingService: messagingService);
           },
         ),
-        
+
         // Voice Messaging Service - for voice messages
         ProxyProvider<MessagingService, VoiceMessagingService>(
           create: (context) => VoiceMessagingService(
@@ -88,25 +85,24 @@ class MediCareApp extends StatelessWidget {
           ),
           update: (context, messagingService, previousVoiceService) {
             previousVoiceService?.dispose();
-            return VoiceMessagingService(
-              messagingService: messagingService,
-            );
+            return VoiceMessagingService(messagingService: messagingService);
           },
         ),
-        
+
         // Voice Messaging Provider - state management for voice
-        ChangeNotifierProxyProvider<VoiceMessagingService, VoiceMessagingProvider>(
+        ChangeNotifierProxyProvider<
+          VoiceMessagingService,
+          VoiceMessagingProvider
+        >(
           create: (context) => VoiceMessagingProvider(
             voiceMessagingService: context.read<VoiceMessagingService>(),
           ),
           update: (context, voiceService, previousVoiceProvider) {
             previousVoiceProvider?.dispose();
-            return VoiceMessagingProvider(
-              voiceMessagingService: voiceService,
-            );
+            return VoiceMessagingProvider(voiceMessagingService: voiceService);
           },
         ),
-        
+
         // Bandwidth Optimization Service - for adaptive video quality
         Provider<BandwidthOptimizationService>(
           create: (_) => BandwidthOptimizationService(),
@@ -114,7 +110,10 @@ class MediCareApp extends StatelessWidget {
         ),
 
         // Network Provider - state management for network quality
-        ChangeNotifierProxyProvider<BandwidthOptimizationService, NetworkProvider>(
+        ChangeNotifierProxyProvider<
+          BandwidthOptimizationService,
+          NetworkProvider
+        >(
           create: (context) => NetworkProvider(
             bandwidthService: context.read<BandwidthOptimizationService>(),
           ),
@@ -167,6 +166,8 @@ class MediCareApp extends StatelessWidget {
       child: MaterialApp(
         title: 'MediCare Connect',
         debugShowCheckedModeBanner: false,
+        builder: (context, child) =>
+            IncomingCallListener(child: child ?? const SizedBox.shrink()),
         theme: ThemeData(
           useMaterial3: true,
           primaryColor: Colors.teal[700],
@@ -208,7 +209,8 @@ class MediCareApp extends StatelessWidget {
             return ConsultationHistoryScreen(api: api);
           },
           '/doctor/dashboard': (context) => const DoctorDashboard(),
-          '/admin': (context) => AdminDashboard(api: TeleMedicineApiClient(backendServerUrl)),
+          '/admin': (context) =>
+              AdminDashboard(api: TeleMedicineApiClient(backendServerUrl)),
         },
       ),
     );

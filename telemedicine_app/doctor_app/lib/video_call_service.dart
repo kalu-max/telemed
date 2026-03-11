@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
 
+import 'config/app_config.dart';
+
 enum CallStatus { idle, ringing, connecting, connected, ended }
 
 class DoctorVideoCallService extends ChangeNotifier {
@@ -46,12 +48,16 @@ class DoctorVideoCallService extends ChangeNotifier {
   }
 
   Timer? _durationTimer;
+  List<Map<String, dynamic>> _iceServers = _cloneIceServers(
+    AppConfig.iceServers,
+  );
 
   // Pending offer SDP from patient (stored when call:incoming is received)
   String? _pendingOfferSdp;
 
   // Incoming call callback
-  void Function(String callId, String patientId, String patientName)? onIncomingCall;
+  void Function(String callId, String patientId, String patientName)?
+      onIncomingCall;
 
   // New appointment callback
   void Function(Map<String, dynamic> appointment)? onNewAppointment;
@@ -68,6 +74,13 @@ class DoctorVideoCallService extends ChangeNotifier {
     _connectSocket();
   }
 
+  void configureIceServers(List<Map<String, dynamic>> iceServers) {
+    final normalized = _cloneIceServers(iceServers);
+    if (normalized.isNotEmpty) {
+      _iceServers = normalized;
+    }
+  }
+
   void _connectSocket() {
     _socket = io.io(serverUrl, <String, dynamic>{
       'transports': ['websocket'],
@@ -81,6 +94,7 @@ class DoctorVideoCallService extends ChangeNotifier {
     });
 
     _socket!.on('call:incoming', (data) => _handleIncomingCall(data));
+    _socket!.on('callAnswered', (data) => _handleCallAnswered(data));
     _socket!.on('call:answered', (data) => _handleCallAnswered(data));
     _socket!.on('offer', (data) => _handleOffer(data));
     _socket!.on('answer', (data) => _handleAnswer(data));
@@ -90,7 +104,8 @@ class DoctorVideoCallService extends ChangeNotifier {
     _socket!.on('call:ended', (_) => _handleCallEnded());
 
     _socket!.on('newAppointment', (data) {
-      final appt = data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{};
+      final appt =
+          data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{};
       onNewAppointment?.call(appt);
     });
 
@@ -103,8 +118,11 @@ class DoctorVideoCallService extends ChangeNotifier {
   void _handleIncomingCall(dynamic data) {
     if (data is! Map) return;
     final callId = data['callId']?.toString() ?? '';
-    final callerId = data['callerId']?.toString() ?? data['patientId']?.toString() ?? '';
-    final callerName = data['callerName']?.toString() ?? data['patientName']?.toString() ?? 'Patient';
+    final callerId =
+        data['callerId']?.toString() ?? data['patientId']?.toString() ?? '';
+    final callerName = data['callerName']?.toString() ??
+        data['patientName']?.toString() ??
+        'Patient';
 
     // Store SDP offer if provided (patient sent it with initiateCall)
     final offerRaw = data['offer'];
@@ -234,8 +252,17 @@ class DoctorVideoCallService extends ChangeNotifier {
     await _peerConnection?.setRemoteDescription(description);
   }
 
-  void _handleCallAnswered(dynamic data) {
-    // The remote peer answered; WebRTC offer/answer exchange follows
+  Future<void> _handleCallAnswered(dynamic data) async {
+    if (data is Map && data['answer'] != null) {
+      await _handleAnswer({'answer': data['answer']});
+    }
+
+    if (_callStatus == CallStatus.ringing ||
+        _callStatus == CallStatus.connecting) {
+      _callStatus = CallStatus.connecting;
+      notifyListeners();
+    }
+
     debugPrint('[DoctorVideoCall] Call answered');
   }
 
@@ -278,10 +305,7 @@ class DoctorVideoCallService extends ChangeNotifier {
   // --- Create peer connection ---
   Future<void> _createPeerConnection() async {
     final configuration = {
-      'iceServers': [
-        {'urls': ['stun:stun.l.google.com:19302']},
-        {'urls': ['stun:stun1.l.google.com:19302']},
-      ],
+      'iceServers': _iceServers,
       'sdpSemantics': 'unified-plan',
     };
 
@@ -403,5 +427,32 @@ class DoctorVideoCallService extends ChangeNotifier {
     localRenderer.dispose();
     remoteRenderer.dispose();
     super.dispose();
+  }
+
+  static List<Map<String, dynamic>> _cloneIceServers(
+    List<Map<String, dynamic>> iceServers,
+  ) {
+    return iceServers
+        .map((server) {
+          final urls = server['urls'] ?? server['url'];
+          if (urls == null) {
+            return null;
+          }
+
+          final normalized = <String, dynamic>{
+            'urls': urls is List ? List<dynamic>.from(urls) : [urls],
+          };
+
+          if (server['username'] != null) {
+            normalized['username'] = server['username'];
+          }
+          if (server['credential'] != null) {
+            normalized['credential'] = server['credential'];
+          }
+
+          return normalized;
+        })
+        .whereType<Map<String, dynamic>>()
+        .toList(growable: false);
   }
 }

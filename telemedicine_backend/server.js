@@ -13,8 +13,6 @@ require('dotenv').config();
 const { sequelize, syncDatabase } = require('./server/config/database');
 const { firestore, firebaseAuth } = require('./server/config/firebase');
 
-const videoSignalingServer = require('./server/websocket/videoSignaling');
-const doctorVideoSignalingServer = require('./server/websocket/doctorVideoSignaling');
 const { initializeCommunicationSocket } = require('./server/websocket/communicationHandler');
 const callManagementAPI = require('./server/api/callManagement');
 const authAPI = require('./server/api/auth');
@@ -142,9 +140,7 @@ io.use((socket, next) => {
   return next();
 });
 
-// Initialize video signaling with Socket.io
-videoSignalingServer(io);
-doctorVideoSignalingServer(io);
+// Use a single Socket.IO signaling handler to avoid duplicate call events.
 initializeCommunicationSocket(io);
 
 // Error handling middleware

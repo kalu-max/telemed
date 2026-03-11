@@ -11,6 +11,7 @@ import '../../communication/utils/encryption_service.dart';
 class PrescriptionService {
   final String serverUrl;
   final String userId;
+  final String userRole;
   final EncryptionService encryptionService;
 
   late io.Socket _socket;
@@ -51,6 +52,7 @@ class PrescriptionService {
     required this.serverUrl,
     required this.userId,
     required this.encryptionService,
+    this.userRole = 'patient',
   });
 
   /// Initialize service with local storage and socket connection
@@ -69,6 +71,7 @@ class PrescriptionService {
       _socket = io.io(serverUrl, <String, dynamic>{
         'transports': ['websocket', 'polling'],
         'autoConnect': true,
+        'query': {'userId': userId, 'role': userRole},
         'reconnection': true,
         'reconnectionDelay': 1000,
         'reconnectionDelayMax': 5000,
@@ -78,7 +81,8 @@ class PrescriptionService {
       _socket.on('connect', (_) {
         _isConnected = true;
         _connectionStatusController.add(true);
-        _socket.emit('authenticate', {'userId': userId});
+        _socket.emit('user:online', {'userId': userId, 'role': userRole});
+        _socket.emit('authenticate', {'userId': userId, 'userRole': userRole});
       });
 
       _socket.on('prescriptionIssued', (data) {

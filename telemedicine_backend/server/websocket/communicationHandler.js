@@ -11,6 +11,20 @@ const activeConnections = new Map();
 const roomConnections = new Map();
 const activeCalls = new Map(); // callId -> { callerId, receiverId, status, createdAt }
 
+function registerSocketIdentity(socket, data = {}) {
+  const declaredUserId = (data.userId || socket.userId || '').toString().trim();
+  if (!declaredUserId) {
+    return null;
+  }
+
+  socket.userId = declaredUserId;
+  socket.role = (data.role || data.userRole || socket.role || 'patient')
+    .toString()
+    .trim() || 'patient';
+  activeConnections.set(declaredUserId, socket);
+  return { userId: socket.userId, role: socket.role };
+}
+
 /**
  * Initialize Socket.IO communication server
  */
@@ -45,21 +59,23 @@ function initializeCommunicationSocket(io) {
     }
 
     if (userId) {
-      socket.userId = userId;
-      socket.role = role;
-      activeConnections.set(userId, socket);
-      socket.emit('authenticated', { userId, role });
+      const identity = registerSocketIdentity(socket, { userId, role });
+      socket.emit('authenticated', identity);
     } else {
       logger.warn(`Socket ${socket.id} connected without resolved user id`);
     }
 
     // Keep a direct way for clients to refresh their online identity.
     socket.on('user:online', (data = {}) => {
-      const declaredUserId = (data.userId || socket.userId || '').toString();
-      if (!declaredUserId) return;
-      socket.userId = declaredUserId;
-      socket.role = (data.role || socket.role || 'patient').toString();
-      activeConnections.set(declaredUserId, socket);
+      const identity = registerSocketIdentity(socket, data);
+      if (!identity) return;
+      socket.emit('authenticated', identity);
+    });
+
+    socket.on('authenticate', (data = {}) => {
+      const identity = registerSocketIdentity(socket, data);
+      if (!identity) return;
+      socket.emit('authenticated', identity);
     });
 
     // ==================== TEXT MESSAGING EVENTS ====================

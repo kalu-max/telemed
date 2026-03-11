@@ -12,7 +12,7 @@ import 'video_call_screen.dart';
 import 'patient_list_screen.dart';
 import 'prescription_screen.dart';
 import 'settings_screen.dart';
-import 'config/app_config.dart';
+import 'config/server_config.dart';
 
 /// Doctor login and dashboard Screen
 void main() {
@@ -82,7 +82,7 @@ class _DoctorLoginScreenState extends State<DoctorLoginScreen> {
       return;
     }
 
-    final api = TeleMedicineApiClient(AppConfig.apiBaseUrl);
+    final api = TeleMedicineApiClient(await ServerConfig.getApiBaseUrl());
     final resp = await api.login(
       email: _emailController.text.trim(),
       password: _passwordController.text,
@@ -363,7 +363,7 @@ class _DoctorRegisterScreenState extends State<DoctorRegisterScreen> {
       return;
     }
 
-    final api = TeleMedicineApiClient(AppConfig.apiBaseUrl);
+    final api = TeleMedicineApiClient(await ServerConfig.getApiBaseUrl());
     final resp = await api.register(
       name: _nameController.text.trim(),
       email: _emailController.text.trim(),
@@ -585,11 +585,24 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
   Future<void> _initCallService() async {
     final doctorId = widget.api.currentUserId ?? '';
     final userName = await UserStorageService.getUserName() ?? 'Doctor';
+    final wsBaseUrl = await ServerConfig.getWsBaseUrl();
     _callService = DoctorVideoCallService(
-      serverUrl: AppConfig.apiBaseUrl,
+      serverUrl: wsBaseUrl,
       doctorId: doctorId,
       doctorName: userName,
     );
+
+    try {
+      final iceConfig = await widget.api.getIceServers();
+      if (iceConfig.success &&
+          iceConfig.data != null &&
+          iceConfig.data!.isNotEmpty) {
+        _callService!.configureIceServers(iceConfig.data!);
+      }
+    } catch (e) {
+      debugPrint('⚠️ Warning: Failed to load ICE servers: $e');
+    }
+
     await _callService!.initialize();
 
     _callService!.onIncomingCall = (callId, patientId, patientName) {

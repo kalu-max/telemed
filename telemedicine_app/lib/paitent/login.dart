@@ -5,6 +5,7 @@ import 'paitentdashboard.dart';
 import 'api_client.dart';
 import 'admin_dashboard.dart';
 import '../communication/services/messaging_service.dart';
+import '../communication/services/video_calling_service.dart';
 import '../services/user_storage_service.dart';
 import '../config/app_config.dart';
 
@@ -18,6 +19,7 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   bool _obscurePassword = true;
   bool _isSignUp = false;
+  bool _isSubmitting = false;
 
   String _selectedGender = 'Male';
   String _selectedBloodType = 'O+';
@@ -38,18 +40,70 @@ class _LoginScreenState extends State<LoginScreen> {
     _phoneController = TextEditingController();
     _dobController = TextEditingController();
     _addressController = TextEditingController();
-    
+
     // Check if user is already logged in and auto-navigate
     _checkAutoLogin();
   }
 
   Future<void> _checkAutoLogin() async {
     final isLoggedIn = await UserStorageService.isUserLoggedIn();
-    if (isLoggedIn && mounted) {
-      final userEmail = await UserStorageService.getUserEmail();
-      if (userEmail != null) {
-        _emailController.text = userEmail;
-      }
+    if (!isLoggedIn || !mounted) {
+      return;
+    }
+
+    final savedInfo = await UserStorageService.getAllUserInfo();
+    final savedUserData =
+        await UserStorageService.getUserData() ?? <String, dynamic>{};
+    final userEmail = savedInfo['userEmail'];
+    if (userEmail != null) {
+      _emailController.text = userEmail;
+    }
+
+    final userId = savedInfo['userId'];
+    final userName = savedInfo['userName'];
+    final userRole = savedInfo['userRole'] ?? savedUserData['role']?.toString();
+    final token = savedInfo['token'];
+
+    if (userId == null || userId.isEmpty || token == null || token.isEmpty) {
+      return;
+    }
+
+    final userData = <String, dynamic>{
+      ...savedUserData,
+      'userId': userId,
+      'name': savedUserData['name'] ?? userName ?? 'Patient',
+      'email': savedUserData['email'] ?? userEmail ?? '',
+      'role': savedUserData['role'] ?? userRole ?? 'patient',
+    };
+
+    if (!mounted) {
+      return;
+    }
+
+    final api = context.read<TeleMedicineApiClient>();
+    final messagingService = context.read<MessagingService>();
+    final videoCallingService = context.read<VideoCallingService>();
+
+    try {
+      await _initializeAuthenticatedSession(
+        api: api,
+        messagingService: messagingService,
+        videoCallingService: videoCallingService,
+        userData: userData,
+        token: token,
+      );
+
+      if (!mounted) return;
+
+      _navigateToRoleDashboard(
+        role: userData['role']?.toString() ?? 'patient',
+        api: api,
+        userId: userId,
+        userProfile: _buildUserProfile(userData),
+      );
+    } catch (e) {
+      debugPrint('⚠️ Warning: Auto-login failed: $e');
+      await UserStorageService.clearUserData();
     }
   }
 
@@ -75,130 +129,172 @@ class _LoginScreenState extends State<LoginScreen> {
     showDialog(
       context: context,
       builder: (ctx) {
-        return StatefulBuilder(builder: (ctx, setStateDialog) {
-          return AlertDialog(
-            title: const Text('Reset Password'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Enter your registered email and choose a new password.',
-                    style: TextStyle(fontSize: 13, color: Colors.grey),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: emailCtrl,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: const InputDecoration(
-                      labelText: 'Email Address',
-                      prefixIcon: Icon(Icons.email_outlined),
-                      border: OutlineInputBorder(),
+        return StatefulBuilder(
+          builder: (ctx, setStateDialog) {
+            return AlertDialog(
+              title: const Text('Reset Password'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Enter your registered email and choose a new password.',
+                      style: TextStyle(fontSize: 13, color: Colors.grey),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: newPassCtrl,
-                    obscureText: obscureNew,
-                    decoration: InputDecoration(
-                      labelText: 'New Password',
-                      prefixIcon: const Icon(Icons.lock_outline),
-                      border: const OutlineInputBorder(),
-                      suffixIcon: IconButton(
-                        icon: Icon(obscureNew ? Icons.visibility_off : Icons.visibility),
-                        onPressed: () => setStateDialog(() => obscureNew = !obscureNew),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: emailCtrl,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: const InputDecoration(
+                        labelText: 'Email Address',
+                        prefixIcon: Icon(Icons.email_outlined),
+                        border: OutlineInputBorder(),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: confirmPassCtrl,
-                    obscureText: obscureConfirm,
-                    decoration: InputDecoration(
-                      labelText: 'Confirm New Password',
-                      prefixIcon: const Icon(Icons.lock_outline),
-                      border: const OutlineInputBorder(),
-                      suffixIcon: IconButton(
-                        icon: Icon(obscureConfirm ? Icons.visibility_off : Icons.visibility),
-                        onPressed: () => setStateDialog(() => obscureConfirm = !obscureConfirm),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: newPassCtrl,
+                      obscureText: obscureNew,
+                      decoration: InputDecoration(
+                        labelText: 'New Password',
+                        prefixIcon: const Icon(Icons.lock_outline),
+                        border: const OutlineInputBorder(),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            obscureNew
+                                ? Icons.visibility_off
+                                : Icons.visibility,
+                          ),
+                          onPressed: () =>
+                              setStateDialog(() => obscureNew = !obscureNew),
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: confirmPassCtrl,
+                      obscureText: obscureConfirm,
+                      decoration: InputDecoration(
+                        labelText: 'Confirm New Password',
+                        prefixIcon: const Icon(Icons.lock_outline),
+                        border: const OutlineInputBorder(),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            obscureConfirm
+                                ? Icons.visibility_off
+                                : Icons.visibility,
+                          ),
+                          onPressed: () => setStateDialog(
+                            () => obscureConfirm = !obscureConfirm,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: isLoading ? null : () => Navigator.pop(ctx),
-                child: const Text('Cancel'),
-              ),
-              ElevatedButton(
-                onPressed: isLoading
-                    ? null
-                    : () async {
-                        final email = emailCtrl.text.trim();
-                        final newPass = newPassCtrl.text;
-                        final confirmPass = confirmPassCtrl.text;
+              actions: [
+                TextButton(
+                  onPressed: isLoading ? null : () => Navigator.pop(ctx),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: isLoading
+                      ? null
+                      : () async {
+                          final email = emailCtrl.text.trim();
+                          final newPass = newPassCtrl.text;
+                          final confirmPass = confirmPassCtrl.text;
 
-                        if (email.isEmpty || newPass.isEmpty || confirmPass.isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Please fill in all fields')),
+                          if (email.isEmpty ||
+                              newPass.isEmpty ||
+                              confirmPass.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Please fill in all fields'),
+                              ),
+                            );
+                            return;
+                          }
+                          if (newPass.length < 6) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Password must be at least 6 characters',
+                                ),
+                              ),
+                            );
+                            return;
+                          }
+                          if (newPass != confirmPass) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Passwords do not match'),
+                              ),
+                            );
+                            return;
+                          }
+
+                          setStateDialog(() => isLoading = true);
+                          final api = TeleMedicineApiClient(
+                            AppConfig.apiBaseUrl,
                           );
-                          return;
-                        }
-                        if (newPass.length < 6) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Password must be at least 6 characters')),
+                          final resp = await api.resetPassword(
+                            email: email,
+                            newPassword: newPass,
                           );
-                          return;
-                        }
-                        if (newPass != confirmPass) {
+                          setStateDialog(() => isLoading = false);
+
+                          if (!ctx.mounted) return;
+                          Navigator.pop(ctx);
+
+                          final success = resp.success;
+                          final msg = success
+                              ? 'Password reset successfully. Please log in.'
+                              : (resp.error ?? 'Reset failed');
+                          final color = success ? Colors.green : Colors.red;
+
+                          if (!mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Passwords do not match')),
+                            SnackBar(
+                              content: Text(msg),
+                              backgroundColor: color,
+                            ),
                           );
-                          return;
-                        }
 
-                        setStateDialog(() => isLoading = true);
-                        final api = TeleMedicineApiClient(AppConfig.apiBaseUrl);
-                        final resp = await api.resetPassword(
-                          email: email,
-                          newPassword: newPass,
-                        );
-                        setStateDialog(() => isLoading = false);
-
-                        if (!ctx.mounted) return;
-                        Navigator.pop(ctx);
-
-                        final success = resp.success;
-                        final msg = success
-                            ? 'Password reset successfully. Please log in.'
-                            : (resp.error ?? 'Reset failed');
-                        final color = success ? Colors.green : Colors.red;
-
-                        if (!mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(msg), backgroundColor: color),
-                        );
-
-                        if (success) {
-                          _emailController.text = email;
-                        }
-                      },
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.teal),
-                child: isLoading
-                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Text('Reset Password', style: TextStyle(color: Colors.white)),
-              ),
-            ],
-          );
-        });
+                          if (success) {
+                            _emailController.text = email;
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.teal),
+                  child: isLoading
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text(
+                          'Reset Password',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                ),
+              ],
+            );
+          },
+        );
       },
     );
   }
 
   Future<void> _handleLogin() async {
+    if (_isSubmitting) {
+      return;
+    }
+
     if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -210,91 +306,62 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    final api = TeleMedicineApiClient(AppConfig.apiBaseUrl);
-    final resp = await api.login(
-      email: _emailController.text.trim(),
-      password: _passwordController.text,
-    );
-
-    if (!mounted) return;
-
-    if (!resp.success || resp.data == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(resp.message ?? 'Login failed')),
-      );
-      return;
-    }
-
-    // Get service reference before any async operations
-    // ignore: use_build_context_synchronously
+    final api = context.read<TeleMedicineApiClient>();
     final messagingService = context.read<MessagingService>();
+    final videoCallingService = context.read<VideoCallingService>();
 
-    api.setAuthToken(resp.data!['token']);
-    api.currentUserId = resp.data!['user']['userId'] as String? ?? '';
-    final role = resp.data!['user']['role'] as String? ?? 'patient';
-    final userId = resp.data!['user']['userId'] as String? ?? '';
-    final userName = resp.data!['user']['name'] as String? ?? 'Patient';
-    final userEmail = resp.data!['user']['email'] as String? ?? '';
-    final token = resp.data!['token'] as String? ?? '';
+    setState(() => _isSubmitting = true);
 
-    // Initialize messaging service properties
-    messagingService.userId = userId;
-    messagingService.userName = userName;
-
-    // Save user data for persistent login
     try {
-      await UserStorageService.saveUserData(
-        userId: userId,
-        userName: userName,
-        userEmail: userEmail,
-        userRole: role,
+      final resp = await api.login(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+      );
+
+      if (!mounted) return;
+
+      if (!resp.success || resp.data == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(resp.error?.toString() ?? 'Login failed')),
+        );
+        return;
+      }
+
+      final userData = Map<String, dynamic>.from(
+        resp.data!['user'] as Map<String, dynamic>? ?? <String, dynamic>{},
+      );
+      final role = userData['role'] as String? ?? 'patient';
+      final userId = userData['userId'] as String? ?? '';
+      final token = resp.data!['token'] as String? ?? '';
+
+      await _initializeAuthenticatedSession(
+        api: api,
+        messagingService: messagingService,
+        videoCallingService: videoCallingService,
+        userData: userData,
         token: token,
-        fullUserData: resp.data!['user'],
       );
-    } catch (e) {
-      debugPrint('⚠️ Warning: Failed to save user data: $e');
-    }
 
-    // Initialize messaging service after login
-    try {
-      await messagingService.initialize();
-    } catch (e) {
-      debugPrint('⚠️ Warning: Failed to initialize communication services: $e');
-    }
+      if (!mounted) return;
 
-    // build a generic profile for patient dashboard
-    final userProfile = UserProfile(
-      name: resp.data!['user']['name'] ?? 'User',
-      email: resp.data!['user']['email'],
-      phone: '+1 (555) 000-0000',
-      dateOfBirth: 'unknown',
-      gender: _selectedGender,
-      bloodType: _selectedBloodType,
-      address: 'n/a',
-    );
-
-    if (!mounted) return;
-
-    if (role == 'admin') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => AdminDashboard(api: api),
-        ),
+      _navigateToRoleDashboard(
+        role: role,
+        api: api,
+        userId: userId,
+        userProfile: _buildUserProfile(userData),
       );
-    } else if (role == 'doctor') {
-      Navigator.pushReplacementNamed(context, '/doctor/dashboard');
-    } else {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => PatientDashboard(userProfile: userProfile, api: api, userId: userId),
-        ),
-      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
     }
   }
 
-  void _handleSignUp() {
+  Future<void> _handleSignUp() async {
+    if (_isSubmitting) {
+      return;
+    }
+
     if (_nameController.text.isEmpty ||
         _emailController.text.isEmpty ||
         _passwordController.text.isEmpty ||
@@ -310,27 +377,187 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    final userProfile = UserProfile(
-      name: _nameController.text,
-      email: _emailController.text,
-      phone: _phoneController.text,
-      dateOfBirth: _dobController.text,
-      gender: _selectedGender,
-      bloodType: _selectedBloodType,
-      address: _addressController.text,
-    );
+    if (_passwordController.text.length < 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Password must be at least 6 characters'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Account created successfully!'),
-        backgroundColor: Colors.green,
-      ),
+    final api = context.read<TeleMedicineApiClient>();
+    final messagingService = context.read<MessagingService>();
+    final videoCallingService = context.read<VideoCallingService>();
+
+    setState(() => _isSubmitting = true);
+
+    try {
+      final resp = await api.register(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+        name: _nameController.text.trim(),
+        role: 'patient',
+      );
+
+      if (!mounted) return;
+
+      if (!resp.success || resp.data == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(resp.error?.toString() ?? 'Could not create account'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      final token = resp.data!['token'] as String? ?? '';
+      final userData =
+          Map<String, dynamic>.from(
+            resp.data!['user'] as Map<String, dynamic>? ?? <String, dynamic>{},
+          )..addAll({
+            'phone': _phoneController.text.trim(),
+            'phoneNumber': _phoneController.text.trim(),
+            'dateOfBirth': _dobController.text.trim(),
+            'gender': _selectedGender,
+            'bloodType': _selectedBloodType,
+            'address': _addressController.text.trim(),
+          });
+
+      await _initializeAuthenticatedSession(
+        api: api,
+        messagingService: messagingService,
+        videoCallingService: videoCallingService,
+        userData: userData,
+        token: token,
+      );
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Account created successfully!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+
+      _navigateToRoleDashboard(
+        role: userData['role']?.toString() ?? 'patient',
+        api: api,
+        userId: userData['userId']?.toString() ?? '',
+        userProfile: _buildUserProfile(userData),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
+  }
+
+  UserProfile _buildUserProfile(Map<String, dynamic> userData) {
+    return UserProfile(
+      name: userData['name']?.toString() ?? 'Patient',
+      email: userData['email']?.toString() ?? '',
+      phone:
+          userData['phone']?.toString() ??
+          userData['phoneNumber']?.toString() ??
+          '',
+      dateOfBirth: userData['dateOfBirth']?.toString() ?? 'unknown',
+      gender: userData['gender']?.toString() ?? _selectedGender,
+      bloodType: userData['bloodType']?.toString() ?? _selectedBloodType,
+      address: userData['address']?.toString() ?? 'n/a',
     );
+  }
+
+  Future<void> _initializeAuthenticatedSession({
+    required TeleMedicineApiClient api,
+    required MessagingService messagingService,
+    required VideoCallingService videoCallingService,
+    required Map<String, dynamic> userData,
+    required String token,
+  }) async {
+    final userId = userData['userId']?.toString() ?? '';
+    final role = userData['role']?.toString() ?? 'patient';
+    final userName = userData['name']?.toString() ?? 'Patient';
+    final userEmail = userData['email']?.toString() ?? '';
+
+    api.setAuthToken(token);
+    api.currentUserId = userId;
+
+    try {
+      await UserStorageService.saveUserData(
+        userId: userId,
+        userName: userName,
+        userEmail: userEmail,
+        userRole: role,
+        token: token,
+        fullUserData: userData,
+      );
+    } catch (e) {
+      debugPrint('⚠️ Warning: Failed to save user data: $e');
+    }
+
+    try {
+      await messagingService.updateSession(
+        userId: userId,
+        userName: userName,
+        role: role,
+      );
+    } catch (e) {
+      debugPrint('⚠️ Warning: Failed to initialize communication services: $e');
+    }
+
+    try {
+      final iceConfig = await api.getIceServers();
+      if (iceConfig.success &&
+          iceConfig.data != null &&
+          iceConfig.data!.isNotEmpty) {
+        videoCallingService.configureIceServers(iceConfig.data!);
+      }
+    } catch (e) {
+      debugPrint('⚠️ Warning: Failed to load ICE servers: $e');
+    }
+
+    try {
+      await videoCallingService.updateSession(
+        userId: userId,
+        userName: userName,
+        role: role,
+      );
+    } catch (e) {
+      debugPrint('⚠️ Warning: Failed to initialize video calling: $e');
+    }
+  }
+
+  void _navigateToRoleDashboard({
+    required String role,
+    required TeleMedicineApiClient api,
+    required String userId,
+    required UserProfile userProfile,
+  }) {
+    if (role == 'admin') {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => AdminDashboard(api: api)),
+      );
+      return;
+    }
+
+    if (role == 'doctor') {
+      Navigator.pushReplacementNamed(context, '/doctor/dashboard');
+      return;
+    }
 
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
-        builder: (context) => PatientDashboard(userProfile: userProfile),
+        builder: (context) => PatientDashboard(
+          userProfile: userProfile,
+          api: api,
+          userId: userId,
+        ),
       ),
     );
   }
@@ -423,7 +650,16 @@ class _LoginScreenState extends State<LoginScreen> {
                   _buildDropdownField(
                     label: 'Blood Type',
                     value: _selectedBloodType,
-                    items: const ['O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-'],
+                    items: const [
+                      'O+',
+                      'O-',
+                      'A+',
+                      'A-',
+                      'B+',
+                      'B-',
+                      'AB+',
+                      'AB-',
+                    ],
                     onChanged: (value) {
                       setState(() => _selectedBloodType = value!);
                     },
@@ -498,7 +734,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 // Login/Sign up button
                 ElevatedButton(
-                  onPressed: _isSignUp ? _handleSignUp : _handleLogin,
+                  onPressed: _isSubmitting
+                      ? null
+                      : (_isSignUp ? _handleSignUp : _handleLogin),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.teal,
                     padding: const EdgeInsets.symmetric(vertical: 16),
@@ -506,14 +744,23 @@ class _LoginScreenState extends State<LoginScreen> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                   ),
-                  child: Text(
-                    _isSignUp ? 'Create Account' : 'Sign In',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
+                  child: _isSubmitting
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : Text(
+                          _isSignUp ? 'Create Account' : 'Sign In',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
                 ),
 
                 const SizedBox(height: 16),
@@ -528,12 +775,14 @@ class _LoginScreenState extends State<LoginScreen> {
                           : 'Don\'t have an account?',
                     ),
                     TextButton(
-                      onPressed: () {
-                        setState(() {
-                          _isSignUp = !_isSignUp;
-                          _clearFields();
-                        });
-                      },
+                      onPressed: _isSubmitting
+                          ? null
+                          : () {
+                              setState(() {
+                                _isSignUp = !_isSignUp;
+                                _clearFields();
+                              });
+                            },
                       child: Text(
                         _isSignUp ? 'Sign In' : 'Create Account',
                         style: const TextStyle(
@@ -583,9 +832,7 @@ class _LoginScreenState extends State<LoginScreen> {
           decoration: InputDecoration(
             prefixIcon: Icon(icon),
             hintText: hintText,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
           ),
         ),
       ],
@@ -613,9 +860,7 @@ class _LoginScreenState extends State<LoginScreen> {
               .toList(),
           onChanged: onChanged,
           decoration: InputDecoration(
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
           ),
         ),
       ],

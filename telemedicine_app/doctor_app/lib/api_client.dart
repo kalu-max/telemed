@@ -227,6 +227,43 @@ class TeleMedicineApiClient {
     }
   }
 
+  Future<ApiResponse<List<Map<String, dynamic>>>> getIceServers({
+    int ttlSeconds = 3600,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/api/users/rtc/ice-servers',
+        queryParameters: {'ttl': ttlSeconds},
+      );
+
+      if (response.statusCode == 200) {
+        final data = response.data as Map<String, dynamic>;
+        final iceServers =
+            (data['iceServers'] as List?)
+                ?.whereType<Map>()
+                .map((entry) => Map<String, dynamic>.from(entry))
+                .toList(growable: false) ??
+            <Map<String, dynamic>>[];
+
+        return ApiResponse(
+          success: true,
+          data: iceServers,
+          message: 'ICE server configuration loaded',
+        );
+      }
+
+      final errorMsg = response.data is Map
+          ? (response.data['error'] ?? 'Failed to fetch ICE servers')
+          : 'Failed to fetch ICE servers';
+      return ApiResponse(success: false, error: errorMsg);
+    } on DioException catch (e) {
+      return ApiResponse(
+        success: false,
+        error: e.response?.data['error'] ?? e.message ?? 'Network error',
+      );
+    }
+  }
+
   Future<ApiResponse<Map<String, dynamic>>> getDoctorProfile(String doctorId) async {
     try {
       final response = await _dio.get('/api/users/doctors/$doctorId');
