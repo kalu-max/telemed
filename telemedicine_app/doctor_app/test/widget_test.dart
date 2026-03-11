@@ -1,18 +1,38 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:doctor_app/main.dart';
+import 'package:doctor_app/config/app_config.dart';
 
 void main() {
   testWidgets('DoctorApp can be created', (WidgetTester tester) async {
-    // Build the application and ensure it renders a widget tree.
     await tester.pumpWidget(const DoctorApp());
     expect(find.byType(DoctorApp), findsOneWidget);
+  });
+
+  testWidgets('Doctor login screen renders email and password fields', (WidgetTester tester) async {
+    await tester.pumpWidget(const DoctorApp());
+    await tester.pumpAndSettle();
+
+    expect(find.byType(TextField), findsWidgets);
+    expect(find.widgetWithText(ElevatedButton, 'Sign In'), findsOneWidget);
+  });
+
+  testWidgets('Doctor login screen has forgot password', (WidgetTester tester) async {
+    await tester.pumpWidget(const DoctorApp());
+    await tester.pumpAndSettle();
+
+    expect(find.text('Forgot Password?'), findsOneWidget);
+  });
+
+  test('Doctor AppConfig has valid API URL', () {
+    expect(AppConfig.apiBaseUrl, isNotEmpty);
+    expect(AppConfig.apiBaseUrl, startsWith('http'));
+  });
+
+  test('Doctor AppConfig ICE servers are non-empty', () {
+    final servers = AppConfig.iceServers;
+    expect(servers, isNotEmpty);
+    expect(servers.first, contains('urls'));
   });
 }

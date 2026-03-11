@@ -9,6 +9,7 @@ import 'api_client.dart';
 // Ensure this import points to the correct location of your Active Consultation Screen
 import 'consultation_waiting_screen.dart';
 import 'chat_screen.dart';
+import 'doctor_reviews_screen.dart';
 import 'calendar.dart';
 
 class FindSpecialistScreen extends StatefulWidget {
@@ -22,10 +23,16 @@ class _FindSpecialistScreenState extends State<FindSpecialistScreen> {
   int _selectedCategoryIndex = 0;
   final List<String> _categories = [
     'All',
-    'General',
+    'General Practitioner',
     'Cardiologist',
     'Dermatologist',
     'Pediatrician',
+    'Orthopedist',
+    'Neurologist',
+    'Psychiatrist',
+    'Urologist',
+    'Ophthalmologist',
+    'Otolaryngologist',
   ];
 
   List<DoctorProfile> _doctors = [];
@@ -123,6 +130,13 @@ class _FindSpecialistScreenState extends State<FindSpecialistScreen> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
       child: TextField(
+        onChanged: (query) {
+          if (query.length >= 2) {
+            _searchDoctors(query);
+          } else if (query.isEmpty) {
+            _loadDoctors(specialization: _selectedCategoryIndex == 0 ? null : _categories[_selectedCategoryIndex]);
+          }
+        },
         decoration: InputDecoration(
           hintText: 'Search doctor, condition, or specialty...',
           hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
@@ -141,6 +155,30 @@ class _FindSpecialistScreenState extends State<FindSpecialistScreen> {
         ),
       ),
     );
+  }
+
+  void _searchDoctors(String query) async {
+    try {
+      final service = context.read<DoctorService>();
+      final resp = await service.api.search(query);
+      if (!mounted) return;
+      if (resp.success && resp.data != null) {
+        final doctorResults = (resp.data!['doctors'] as List?) ?? [];
+        final searchedDoctors = doctorResults.map((d) {
+          final map = Map<String, dynamic>.from(d);
+          return DoctorProfile(
+            id: map['userId'] ?? '',
+            name: map['name'] ?? 'Doctor',
+            specialties: [map['specialization'] ?? 'General'],
+            rating: (map['rating'] ?? 0).toDouble(),
+            bio: map['bio'] ?? '',
+            yearsOfExperience: map['yearsOfExperience'],
+            consultationFee: map['consultationFee'] != null ? (map['consultationFee'] as num).toDouble() : null,
+          );
+        }).toList();
+        setState(() { _doctors = searchedDoctors; });
+      }
+    } catch (_) {}
   }
 
   Widget _buildCategoryFilters() {
@@ -322,6 +360,26 @@ class _FindSpecialistScreenState extends State<FindSpecialistScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
+              // Reviews link
+              TextButton.icon(
+                onPressed: () {
+                  final service = context.read<DoctorService>();
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => DoctorReviewsScreen(
+                        api: service.api,
+                        doctorId: doctor.id,
+                        doctorName: doctor.name,
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.star, size: 16, color: Colors.amber),
+                label: const Text('Reviews', style: TextStyle(fontSize: 12)),
+                style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8)),
+              ),
+              const Spacer(),
               Expanded(
                 child: _buildActionButton(context, doctor),
               ),
@@ -364,9 +422,9 @@ class _FindSpecialistScreenState extends State<FindSpecialistScreen> {
               ),
               onPressed: () {
                 Navigator.pop(dialogContext);
-                _bookAndWait(context, doctor, specialty);
+                _showSlotPicker(context, doctor, specialty);
               },
-              child: const Text('Consent & Join', style: TextStyle(color: Colors.white)),
+              child: const Text('Consent & Continue', style: TextStyle(color: Colors.white)),
             ),
           ],
         );
@@ -374,8 +432,175 @@ class _FindSpecialistScreenState extends State<FindSpecialistScreen> {
     );
   }
 
+  Future<void> _showSlotPicker(BuildContext context, DoctorProfile doctor, String specialty) async {
+    final service = context.read<DoctorService>();
+    final TeleMedicineApiClient api = service.api;
+    DateTime selectedDate = DateTime.now();
+    List<Map<String, dynamic>> availableSlots = [];
+    String? selectedTime;
+    bool loadingSlots = false;
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            Future<void> loadSlots() async {
+              setSheetState(() { loadingSlots = true; selectedTime = null; });
+              final dateStr = '${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}';
+              final resp = await api.getDoctorTimeSlots(doctor.id, dateStr);
+              if (!ctx.mounted) return;
+              if (resp.success && resp.data != null) {
+                final slots = (resp.data!['slots'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+                setSheetState(() { availableSlots = slots; loadingSlots = false; });
+              } else {
+                setSheetState(() { availableSlots = []; loadingSlots = false; });
+              }
+            }
+
+            // Load on first build
+            if (availableSlots.isEmpty && !loadingSlots) {
+              Future.microtask(loadSlots);
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(ctx).viewInsets.bottom,
+                left: 16, right: 16, top: 16,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40, height: 4,
+                      decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text('Book with ${doctor.name}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 16),
+                  // Date picker
+                  Row(
+                    children: [
+                      const Icon(Icons.calendar_today, size: 18, color: Colors.teal),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                      ),
+                      const Spacer(),
+                      TextButton(
+                        onPressed: () async {
+                          final picked = await showDatePicker(
+                            context: ctx,
+                            initialDate: selectedDate,
+                            firstDate: DateTime.now(),
+                            lastDate: DateTime.now().add(const Duration(days: 30)),
+                          );
+                          if (picked != null) {
+                            selectedDate = picked;
+                            await loadSlots();
+                          }
+                        },
+                        child: const Text('Change Date'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  const Text('Available Time Slots', style: TextStyle(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 8),
+                  if (loadingSlots)
+                    const Center(child: Padding(padding: EdgeInsets.all(16.0), child: CircularProgressIndicator()))
+                  else if (availableSlots.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Center(
+                        child: Column(
+                          children: [
+                            Icon(Icons.event_busy, color: Colors.grey[400], size: 40),
+                            const SizedBox(height: 8),
+                            Text('No slots available on this day', style: TextStyle(color: Colors.grey[600])),
+                            const SizedBox(height: 4),
+                            Text('Try picking another date or book now', style: TextStyle(color: Colors.grey[400], fontSize: 12)),
+                          ],
+                        ),
+                      ),
+                    )
+                  else
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: availableSlots.map((slot) {
+                        final time = slot['time'] as String;
+                        final available = slot['available'] == true;
+                        final isSelected = selectedTime == time;
+                        return ChoiceChip(
+                          label: Text(time),
+                          selected: isSelected,
+                          onSelected: available ? (selected) {
+                            setSheetState(() { selectedTime = selected ? time : null; });
+                          } : null,
+                          backgroundColor: available ? Colors.white : Colors.grey[200],
+                          selectedColor: Colors.teal[700],
+                          labelStyle: TextStyle(
+                            color: isSelected ? Colors.white : (available ? Colors.black87 : Colors.grey),
+                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            side: BorderSide(color: isSelected ? Colors.teal[700]! : Colors.grey[300]!),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.teal[700],
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        if (selectedTime != null) {
+                          // Parse the selected time into a DateTime
+                          final parts = selectedTime!.split(':');
+                          final slotDateTime = DateTime(
+                            selectedDate.year, selectedDate.month, selectedDate.day,
+                            int.parse(parts[0]), int.parse(parts[1]),
+                          );
+                          _bookAndWait(context, doctor, specialty, slotDateTime);
+                        } else {
+                          // Book immediately (now) if no slots available
+                          _bookAndWait(context, doctor, specialty, DateTime.now());
+                        }
+                      },
+                      child: Text(
+                        selectedTime != null ? 'Book at $selectedTime' : 'Book Now',
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   Future<void> _bookAndWait(
-      BuildContext context, DoctorProfile doctor, String specialty) async {
+      BuildContext context, DoctorProfile doctor, String specialty, DateTime slotTime) async {
     final service = context.read<DoctorService>();
     final TeleMedicineApiClient api = service.api;
     final reason = 'Teleconsultation with ${doctor.name}';
@@ -389,7 +614,7 @@ class _FindSpecialistScreenState extends State<FindSpecialistScreen> {
 
     final resp = await api.bookAppointment(
       doctorId: doctor.id,
-      slotTime: DateTime.now(),
+      slotTime: slotTime,
       reason: reason,
     );
 

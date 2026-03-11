@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 import 'api_client.dart';
 
 class PrescriptionListScreen extends StatefulWidget {
@@ -376,6 +379,93 @@ class PrescriptionDetailScreen extends StatelessWidget {
 
   const PrescriptionDetailScreen({super.key, required this.prescription});
 
+  Future<void> _sharePdf() async {
+    final medications =
+        (prescription['medications'] as List?)?.cast<Map<String, dynamic>>() ??
+            [];
+    final date = prescription['createdAt'] != null
+        ? DateFormat.yMMMd().format(
+            DateTime.tryParse(prescription['createdAt'].toString()) ??
+                DateTime.now())
+        : 'Unknown date';
+    final id = prescription['prescriptionId']?.toString() ?? 'rx';
+
+    final pdf = pw.Document();
+    pdf.addPage(pw.Page(
+      pageFormat: PdfPageFormat.a4,
+      margin: const pw.EdgeInsets.all(32),
+      build: (ctx) => pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Center(
+            child: pw.Text('MEDICAL PRESCRIPTION',
+                style: pw.TextStyle(
+                    fontSize: 18, fontWeight: pw.FontWeight.bold)),
+          ),
+          pw.Divider(thickness: 2),
+          pw.SizedBox(height: 8),
+          pw.Text(
+              'Patient: ${prescription['patientName'] ?? prescription['patientId'] ?? 'Unknown'}',
+              style:
+                  pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+          pw.Text('Date: $date', style: const pw.TextStyle(fontSize: 10)),
+          pw.SizedBox(height: 8),
+          if ((prescription['diagnosis']?.toString() ?? '').isNotEmpty) ...[
+            pw.Text('Diagnosis',
+                style: pw.TextStyle(
+                    fontSize: 11,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.blue800)),
+            pw.Text(prescription['diagnosis'].toString(),
+                style: const pw.TextStyle(fontSize: 10)),
+            pw.SizedBox(height: 8),
+          ],
+          if ((prescription['notes']?.toString() ?? '').isNotEmpty) ...[
+            pw.Text('Notes',
+                style: pw.TextStyle(
+                    fontSize: 11,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.blue800)),
+            pw.Text(prescription['notes'].toString(),
+                style: const pw.TextStyle(fontSize: 10)),
+            pw.SizedBox(height: 8),
+          ],
+          pw.Text('Medications',
+              style: pw.TextStyle(
+                  fontSize: 11,
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfColors.blue800)),
+          pw.SizedBox(height: 4),
+          if (medications.isEmpty)
+            pw.Text('No medications listed.',
+                style: const pw.TextStyle(fontSize: 10))
+          else
+            pw.TableHelper.fromTextArray(
+              headerStyle:
+                  pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
+              cellStyle: const pw.TextStyle(fontSize: 9),
+              headerDecoration:
+                  const pw.BoxDecoration(color: PdfColors.grey200),
+              headers: ['#', 'Medicine', 'Dosage', 'Frequency', 'Duration'],
+              data: List.generate(medications.length, (i) {
+                final m = medications[i];
+                return [
+                  '${i + 1}',
+                  m['name']?.toString() ?? 'Medicine',
+                  m['dosage']?.toString() ?? '-',
+                  m['frequency']?.toString() ?? '-',
+                  m['duration']?.toString() ?? '-',
+                ];
+              }),
+            ),
+        ],
+      ),
+    ));
+
+    final bytes = await pdf.save();
+    await Printing.sharePdf(bytes: bytes, filename: 'prescription_$id.pdf');
+  }
+
   @override
   Widget build(BuildContext context) {
     final medications = (prescription['medications'] as List?)?.cast<Map<String, dynamic>>() ?? [];
@@ -384,7 +474,16 @@ class PrescriptionDetailScreen extends StatelessWidget {
         : 'Unknown date';
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Prescription Details')),
+      appBar: AppBar(
+        title: const Text('Prescription Details'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.picture_as_pdf),
+            tooltip: 'Share PDF',
+            onPressed: _sharePdf,
+          ),
+        ],
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(

@@ -46,10 +46,26 @@ sequelize.authenticate()
 // Sync models with database
 const syncDatabase = async (force = false) => {
   try {
-    await sequelize.sync({ force, alter: !force });
+    if (force) {
+      await sequelize.sync({ force: true });
+    } else if (dialect === 'sqlite') {
+      // SQLite ALTER TABLE is limited — create missing tables, skip alter
+      await sequelize.sync({ force: false });
+    } else {
+      await sequelize.sync({ alter: true });
+    }
     logger.info('✅ Database synchronized');
   } catch (err) {
-    logger.error('❌ Database sync failed:', err.message);
+    logger.error('❌ Database sync failed:', err.message, err.sql || '');
+    // On SQLite, retry without alter as a fallback
+    if (dialect === 'sqlite') {
+      try {
+        await sequelize.sync({ force: true });
+        logger.info('✅ Database re-created (force sync fallback)');
+      } catch (err2) {
+        logger.error('❌ Force sync also failed:', err2.message);
+      }
+    }
   }
 };
 

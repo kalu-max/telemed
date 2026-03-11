@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+// Import generated localizations (includes Material/Widgets/Cupertino delegates)
+import 'l10n/app_localizations.dart';
+
 // Import all the screens from paitent module
 import 'package:provider/provider.dart';
 
@@ -19,11 +22,16 @@ import 'communication/services/video_calling_service.dart';
 import 'communication/services/bandwidth_optimization_service.dart';
 import 'communication/widgets/incoming_call_listener.dart';
 import 'config/app_config.dart';
+import 'services/notification_service.dart';
+import 'services/analytics_service.dart';
 
 const String backendServerUrl = AppConfig.apiBaseUrl;
 const String webSocketServerUrl = AppConfig.wsBaseUrl;
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await NotificationService.instance.init();
+  await AnalyticsService.instance.init();
   runApp(const MediCareApp());
 }
 
@@ -166,6 +174,8 @@ class MediCareApp extends StatelessWidget {
       child: MaterialApp(
         title: 'MediCare Connect',
         debugShowCheckedModeBanner: false,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         builder: (context, child) =>
             IncomingCallListener(child: child ?? const SizedBox.shrink()),
         theme: ThemeData(

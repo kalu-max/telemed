@@ -3,15 +3,24 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const { asyncHandler } = require('../middleware/errorHandler');
 const logger = require('../utils/logger');
-const { User, Doctor } = require('../models/index');
+const { User, Doctor, OtpToken } = require('../models/index');
+const { sendOtpEmail } = require('../services/emailService');
 
 const router = express.Router();
 
-// Seed admin user into persistent DB on startup
-const adminEmail = process.env.ADMIN_EMAIL || 'admin@telemedicine.com';
-const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
+// Seed admin user into persistent DB on startup — only when env vars are explicitly set
+const adminEmail = process.env.ADMIN_EMAIL;
+const adminPassword = process.env.ADMIN_PASSWORD;
 (async () => {
   try {
+    if (!adminEmail || !adminPassword) {
+      logger.warn('[SECURITY] ADMIN_EMAIL / ADMIN_PASSWORD not set — skipping admin seed. Set them in .env for production.');
+      return;
+    }
+    if (adminPassword.length < 8) {
+      logger.warn('[SECURITY] ADMIN_PASSWORD is too short (min 8 chars). Skipping admin seed.');
+      return;
+    }
     const existing = await User.findOne({ where: { email: adminEmail } });
     if (!existing) {
       const hashed = await bcrypt.hash(adminPassword, 10);
@@ -210,9 +219,37 @@ router.post('/logout', (req, res) => {
   res.json({ message: 'Logged out successfully' });
 });
 
-// Reset password (direct reset without email OTP; extend with SMTP for production)
+const OTP_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
+
+// Request password-reset OTP (persisted to DB, sent via email)
+router.post('/request-otp', asyncHandler(async (req, res) => {
+  const { email } = req.body;
+  const normalizedEmail = `${email || ''}`.trim().toLowerCase();
+  if (!normalizedEmail) return res.status(400).json({ error: 'Email is required' });
+
+  const user = await User.findOne({ where: { email: normalizedEmail } });
+  if (!user) {
+    // Don't reveal whether the email exists
+    return res.json({ success: true, message: 'If that email exists, an OTP has been sent.' });
+  }
+
+  const crypto = require('crypto');
+  const otp = String(crypto.randomInt(100000, 999999));
+  const expiresAt = new Date(Date.now() + OTP_EXPIRY_MS);
+
+  // Persist OTP to database (upsert: one active OTP per email)
+  await OtpToken.destroy({ where: { email: normalizedEmail } });
+  await OtpToken.create({ email: normalizedEmail, otp, expiresAt });
+
+  // Send OTP via email (falls back to logging when SMTP not configured)
+  await sendOtpEmail(normalizedEmail, otp);
+
+  res.json({ success: true, message: 'If that email exists, an OTP has been sent.' });
+}));
+
+// Reset password with OTP verification (reads from DB)
 router.post('/reset-password', asyncHandler(async (req, res) => {
-  const { email, newPassword } = req.body;
+  const { email, otp, newPassword } = req.body;
   const normalizedEmail = `${email || ''}`.trim().toLowerCase();
 
   if (!normalizedEmail || !newPassword) {
@@ -221,6 +258,20 @@ router.post('/reset-password', asyncHandler(async (req, res) => {
 
   if (newPassword.length < 6) {
     return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  }
+
+  // OTP verification from persistent DB store
+  const stored = await OtpToken.findOne({ where: { email: normalizedEmail } });
+  if (stored) {
+    if (!otp) return res.status(400).json({ error: 'OTP is required' });
+    if (stored.otp !== String(otp).trim()) return res.status(400).json({ error: 'Invalid OTP' });
+    if (new Date() > new Date(stored.expiresAt)) {
+      await stored.destroy();
+      return res.status(400).json({ error: 'OTP has expired. Please request a new one.' });
+    }
+    await stored.destroy();
+  } else if (otp) {
+    return res.status(400).json({ error: 'No OTP was requested for this email' });
   }
 
   const user = await User.findOne({ where: { email: normalizedEmail } });

@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'api_client.dart';
 import 'user_storage_service.dart';
 import 'admin_dashboard.dart';
-import 'chat_list.dart'; // Importing ChatListScreen
+import 'chat_list.dart';
 import 'chat_screen.dart';
 import 'notifications.dart';
 import 'calendar.dart';
@@ -13,9 +14,12 @@ import 'patient_list_screen.dart';
 import 'prescription_screen.dart';
 import 'settings_screen.dart';
 import 'config/server_config.dart';
+import 'services/notification_service.dart';
 
 /// Doctor login and dashboard Screen
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await NotificationService.instance.init();
   runApp(const DoctorApp());
 }
 
@@ -24,10 +28,56 @@ class DoctorApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Doctor Telemedicine',
-      theme: ThemeData(primarySwatch: Colors.blue),
-      home: const DoctorLoginScreen(),
+    return MultiProvider(
+      providers: [
+        Provider<TeleMedicineApiClient>(
+          create: (_) => TeleMedicineApiClient(ServerConfig.defaultApiBaseUrl),
+        ),
+        ChangeNotifierProvider<DoctorVideoCallService>(
+          create: (_) => DoctorVideoCallService(
+            serverUrl: ServerConfig.defaultWsBaseUrl,
+            doctorId: '',
+            doctorName: '',
+          ),
+          lazy: true,
+        ),
+      ],
+      child: MaterialApp(
+        title: 'Doctor Telemedicine',
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData(
+          useMaterial3: true,
+          primaryColor: Colors.blue[700],
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: Colors.blue,
+            primary: Colors.blue[700]!,
+            secondary: Colors.cyan,
+            surface: Colors.grey[50]!,
+          ),
+          scaffoldBackgroundColor: Colors.grey[50],
+          appBarTheme: const AppBarTheme(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            iconTheme: IconThemeData(color: Colors.black87),
+            titleTextStyle: TextStyle(
+              color: Colors.black87,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          elevatedButtonTheme: ElevatedButtonThemeData(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue[700],
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ),
+          fontFamily: 'Roboto',
+        ),
+        home: const DoctorLoginScreen(),
+      ),
     );
   }
 }
@@ -314,9 +364,76 @@ class _DoctorLoginScreenState extends State<DoctorLoginScreen> {
                   },
                   child: const Text('New doctor? Register'),
                 ),
+                TextButton(
+                  onPressed: () => _showForgotPasswordDialog(context),
+                  child: const Text('Forgot Password?'),
+                ),
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  void _showForgotPasswordDialog(BuildContext ctx) {
+    final emailCtrl = TextEditingController(text: _emailController.text);
+    final otpCtrl = TextEditingController();
+    final newPassCtrl = TextEditingController();
+    bool otpSent = false;
+
+    showDialog(
+      context: ctx,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Reset Password'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: emailCtrl, decoration: const InputDecoration(labelText: 'Email')),
+              if (otpSent) ...[
+                const SizedBox(height: 12),
+                TextField(controller: otpCtrl, decoration: const InputDecoration(labelText: 'OTP Code'), keyboardType: TextInputType.number),
+                const SizedBox(height: 12),
+                TextField(controller: newPassCtrl, decoration: const InputDecoration(labelText: 'New Password'), obscureText: true),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            if (!otpSent)
+              ElevatedButton(
+                onPressed: () async {
+                  final api = TeleMedicineApiClient(await ServerConfig.getApiBaseUrl());
+                  final resp = await api.requestPasswordOtp(emailCtrl.text.trim().toLowerCase());
+                  if (context.mounted) {
+                    if (resp.success) {
+                      setDialogState(() => otpSent = true);
+                      ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('OTP sent (check server logs in dev)'), backgroundColor: Colors.blue));
+                    } else {
+                      ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(resp.error?.toString() ?? 'Failed')));
+                    }
+                  }
+                },
+                child: const Text('Send OTP'),
+              )
+            else
+              ElevatedButton(
+                onPressed: () async {
+                  final api = TeleMedicineApiClient(await ServerConfig.getApiBaseUrl());
+                  final resp = await api.resetPasswordWithOtp(emailCtrl.text.trim().toLowerCase(), otpCtrl.text.trim(), newPassCtrl.text);
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                    if (resp.success) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Password reset! Please login.'), backgroundColor: Colors.green));
+                    } else {
+                      ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(resp.error?.toString() ?? 'Reset failed')));
+                    }
+                  }
+                },
+                child: const Text('Reset Password'),
+              ),
+          ],
         ),
       ),
     );

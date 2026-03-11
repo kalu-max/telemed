@@ -19,11 +19,130 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _notificationsEnabled = true;
   String _serverUrl = AppConfig.apiBaseUrl;
   final _urlController = TextEditingController();
+  List<Map<String, dynamic>> _availabilitySlots = [];
+  bool _loadingSlots = false;
+
+  static const _dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
   @override
   void initState() {
     super.initState();
     _loadSettings();
+    _loadAvailability();
+  }
+
+  Future<void> _loadAvailability() async {
+    final doctorId = widget.api.currentUserId;
+    if (doctorId == null) return;
+    setState(() => _loadingSlots = true);
+    final resp = await widget.api.getDoctorAvailability(doctorId);
+    if (!mounted) return;
+    if (resp.success && resp.data != null) {
+      final slots = (resp.data!['slots'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      setState(() { _availabilitySlots = slots; _loadingSlots = false; });
+    } else {
+      setState(() => _loadingSlots = false);
+    }
+  }
+
+  Future<void> _addSlot() async {
+    int? dayOfWeek;
+    TimeOfDay startTime = const TimeOfDay(hour: 9, minute: 0);
+    TimeOfDay endTime = const TimeOfDay(hour: 17, minute: 0);
+
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (dialogCtx) {
+        return StatefulBuilder(builder: (ctx, setDialogState) {
+          return AlertDialog(
+            title: const Text('Add Availability Slot'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<int>(
+                  decoration: const InputDecoration(labelText: 'Day of Week'),
+                  value: dayOfWeek,
+                  items: List.generate(7, (i) => DropdownMenuItem(value: i, child: Text(_dayNames[i]))),
+                  onChanged: (v) => setDialogState(() => dayOfWeek = v),
+                ),
+                const SizedBox(height: 12),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('Start: ${startTime.format(ctx)}'),
+                  trailing: const Icon(Icons.access_time),
+                  onTap: () async {
+                    final t = await showTimePicker(context: ctx, initialTime: startTime);
+                    if (t != null) setDialogState(() => startTime = t);
+                  },
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('End: ${endTime.format(ctx)}'),
+                  trailing: const Icon(Icons.access_time),
+                  onTap: () async {
+                    final t = await showTimePicker(context: ctx, initialTime: endTime);
+                    if (t != null) setDialogState(() => endTime = t);
+                  },
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+              ElevatedButton(
+                onPressed: dayOfWeek != null ? () {
+                  Navigator.pop(ctx, {
+                    'dayOfWeek': dayOfWeek,
+                    'startTime': '${startTime.hour.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}',
+                    'endTime': '${endTime.hour.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}',
+                    'slotDurationMinutes': 30,
+                  });
+                } : null,
+                child: const Text('Add'),
+              ),
+            ],
+          );
+        });
+      },
+    );
+
+    if (result != null) {
+      final newSlots = [..._availabilitySlots.map((s) => {
+        'dayOfWeek': s['dayOfWeek'],
+        'startTime': s['startTime'],
+        'endTime': s['endTime'],
+        'slotDurationMinutes': s['slotDurationMinutes'] ?? 30,
+      }), result];
+      
+      final doctorId = widget.api.currentUserId;
+      if (doctorId == null) return;
+      final resp = await widget.api.updateDoctorAvailability(doctorId, newSlots);
+      if (!mounted) return;
+      if (resp.success) {
+        _loadAvailability();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(resp.error?.toString() ?? 'Failed to update')));
+      }
+    }
+  }
+
+  Future<void> _removeSlot(int index) async {
+    final newSlots = _availabilitySlots.asMap().entries
+        .where((e) => e.key != index)
+        .map((e) => {
+          'dayOfWeek': e.value['dayOfWeek'],
+          'startTime': e.value['startTime'],
+          'endTime': e.value['endTime'],
+          'slotDurationMinutes': e.value['slotDurationMinutes'] ?? 30,
+        })
+        .toList();
+
+    final doctorId = widget.api.currentUserId;
+    if (doctorId == null) return;
+    final resp = await widget.api.updateDoctorAvailability(doctorId, newSlots);
+    if (!mounted) return;
+    if (resp.success) {
+      _loadAvailability();
+    }
   }
 
   Future<void> _loadSettings() async {
@@ -121,6 +240,65 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ],
             ),
+          ),
+
+          const SizedBox(height: 24),
+
+          // Availability section
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Availability Schedule',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              IconButton(
+                onPressed: _addSlot,
+                icon: const Icon(Icons.add_circle, color: Colors.blue),
+                tooltip: 'Add time slot',
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Card(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: _loadingSlots
+                ? const Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                : _availabilitySlots.isEmpty
+                    ? Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Center(
+                          child: Column(
+                            children: [
+                              Icon(Icons.schedule, color: Colors.grey[400], size: 40),
+                              const SizedBox(height: 8),
+                              Text('No availability set', style: TextStyle(color: Colors.grey[600])),
+                              const SizedBox(height: 4),
+                              Text('Tap + to add your available hours', style: TextStyle(color: Colors.grey[400], fontSize: 12)),
+                            ],
+                          ),
+                        ),
+                      )
+                    : Column(
+                        children: _availabilitySlots.asMap().entries.map((entry) {
+                          final i = entry.key;
+                          final slot = entry.value;
+                          final dayIdx = slot['dayOfWeek'] is int ? slot['dayOfWeek'] as int : 0;
+                          final dayName = dayIdx >= 0 && dayIdx < 7 ? _dayNames[dayIdx] : 'Unknown';
+                          return ListTile(
+                            leading: const Icon(Icons.access_time, color: Colors.blue),
+                            title: Text(dayName),
+                            subtitle: Text('${slot['startTime']} - ${slot['endTime']}'),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.delete_outline, color: Colors.red),
+                              onPressed: () => _removeSlot(i),
+                            ),
+                          );
+                        }).toList(),
+                      ),
           ),
 
           const SizedBox(height: 24),

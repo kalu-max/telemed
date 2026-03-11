@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'api_client.dart';
+import 'consultation_notes_screen.dart';
 
 /// Shows consultation history with a 7-day free-follow-up section.
 ///
@@ -201,7 +202,7 @@ class _ConsultationHistoryScreenState extends State<ConsultationHistoryScreen>
     }
     return ListView(
       padding: const EdgeInsets.all(16),
-      children: all.map((a) => _HistoryCard(appt: a)).toList(),
+      children: all.map((a) => _HistoryCard(appt: a, api: widget.api)).toList(),
     );
   }
 
@@ -437,8 +438,9 @@ class _FollowUpCardState extends State<_FollowUpCard> {
 
 class _HistoryCard extends StatelessWidget {
   final Map<String, dynamic> appt;
+  final TeleMedicineApiClient api;
 
-  const _HistoryCard({required this.appt});
+  const _HistoryCard({required this.appt, required this.api});
 
   @override
   Widget build(BuildContext context) {
@@ -471,28 +473,57 @@ class _HistoryCard extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: Colors.grey[100],
-          child: Icon(Icons.medical_services, color: Colors.grey[600]),
-        ),
-        title: Text(doctorName,
-            style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text('$reason • $dateStr'),
-        trailing: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: statusColor.withAlpha(20),
-            borderRadius: BorderRadius.circular(6),
+      child: Column(
+        children: [
+          ListTile(
+            leading: CircleAvatar(
+              backgroundColor: Colors.grey[100],
+              child: Icon(Icons.medical_services, color: Colors.grey[600]),
+            ),
+            title: Text(doctorName,
+                style: const TextStyle(fontWeight: FontWeight.w600)),
+            subtitle: Text('$reason • $dateStr'),
+            trailing: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: statusColor.withAlpha(20),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                status,
+                style: TextStyle(
+                    color: statusColor,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold),
+              ),
+            ),
           ),
-          child: Text(
-            status,
-            style: TextStyle(
-                color: statusColor,
-                fontSize: 11,
-                fontWeight: FontWeight.bold),
-          ),
-        ),
+          if (status == 'completed') ...[            Padding(
+              padding: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  icon: const Icon(Icons.notes, size: 16),
+                  label: const Text('View Notes', style: TextStyle(fontSize: 12)),
+                  onPressed: () {
+                    final consultId = appt['consultationId']?.toString() ??
+                        appt['appointmentId']?.toString() ?? '';
+                    if (consultId.isEmpty) return;
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ConsultationNotesScreen(
+                          api: api,
+                          consultationId: consultId,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

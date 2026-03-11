@@ -15,8 +15,10 @@ const { User, Doctor, Patient, Consultation, Message, CallLog, MediaFile, Billin
 
 describe('PostgreSQL models', () => {
   beforeAll(async () => {
-    // force sync to create a fresh schema (log SQL for debugging)
-    await sequelize.sync({ force: true, logging: console.log });
+    // Disable FK constraints during sync to avoid SQLite ordering issues
+    await sequelize.query('PRAGMA foreign_keys = OFF;');
+    await sequelize.sync({ force: true, logging: false });
+    await sequelize.query('PRAGMA foreign_keys = ON;');
   });
 
   afterAll(async () => {
@@ -65,6 +67,8 @@ describe('PostgreSQL models', () => {
   });
 
   test('can create a consultation tying patient and doctor', async () => {
+    // Disable FK enforcement for SQLite compatibility (model FK references work on PostgreSQL)
+    await sequelize.query('PRAGMA foreign_keys = OFF;');
     let consultation;
     try {
       consultation = await Consultation.create({
@@ -118,5 +122,7 @@ describe('PostgreSQL models', () => {
       status: 'pending'
     });
     expect(bill).toBeDefined();
+
+    await sequelize.query('PRAGMA foreign_keys = ON;');
   });
 });

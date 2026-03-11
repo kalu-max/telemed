@@ -248,6 +248,62 @@ const realtimeDatabase = {
   }
 };
 
+// Firebase Cloud Messaging (FCM) push notifications
+const fcm = {
+  /**
+   * Send a push notification to a single device via FCM token.
+   * @param {string} fcmToken - The device FCM registration token
+   * @param {string} title - Notification title
+   * @param {string} body - Notification body
+   * @param {object} [data] - Optional data payload
+   */
+  sendPush: async (fcmToken, title, body, data = {}) => {
+    if (!admin.apps.length) {
+      logger.warn('Firebase not initialized — push notification skipped');
+      return null;
+    }
+    if (!fcmToken) return null;
+    try {
+      const message = {
+        token: fcmToken,
+        notification: { title, body },
+        data: Object.fromEntries(
+          Object.entries(data).map(([k, v]) => [k, String(v)])
+        ),
+        android: {
+          priority: 'high',
+          notification: { channelId: 'telemedicine_default' },
+        },
+        apns: {
+          payload: { aps: { sound: 'default', badge: 1 } },
+        },
+      };
+      const response = await admin.messaging().send(message);
+      logger.info(`FCM push sent: ${response}`);
+      return response;
+    } catch (err) {
+      logger.error(`FCM push failed: ${err.message}`);
+      return null;
+    }
+  },
+
+  /**
+   * Send push to a user by userId (looks up fcmToken from DB).
+   */
+  sendPushToUser: async (userId, title, body, data = {}) => {
+    try {
+      const { User } = require('../models/index');
+      const user = await User.findByPk(userId, { attributes: ['fcmToken'] });
+      if (user?.fcmToken) {
+        return fcm.sendPush(user.fcmToken, title, body, data);
+      }
+    } catch (err) {
+      logger.error(`FCM sendPushToUser error: ${err.message}`);
+    }
+    return null;
+  }
+};
+
 module.exports = {
   admin,
   db,
@@ -255,5 +311,6 @@ module.exports = {
   realtimeDb,
   firestore,
   firebaseAuth,
-  realtimeDatabase
+  realtimeDatabase,
+  fcm
 };

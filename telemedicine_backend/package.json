@@ -10,7 +10,10 @@
     "lint": "eslint .",
     "db:init": "node scripts/initDatabase.js",
     "db:seed": "node scripts/initDatabase.js --seed",
-    "db:reset": "node scripts/initDatabase.js --force --seed"
+    "db:reset": "node scripts/initDatabase.js --force --seed",
+    "migrate": "node scripts/migrate.js",
+    "migrate:undo": "node scripts/migrate.js --undo",
+    "migrate:status": "node scripts/migrate.js --status"
   },
   "keywords": [
     "webrtc",
@@ -33,19 +36,17 @@
     "firebase-admin": "^12.0.0",
     "helmet": "^7.0",
     "jsonwebtoken": "^9.0",
-    "mongoose": "^7.0",
     "morgan": "^1.10",
     "multer": "^1.4",
+    "nodemailer": "^8.0.2",
     "pg": "^8.11.0",
     "pg-hstore": "^2.3.4",
-    "redis": "^4.6",
     "sequelize": "^6.35.0",
     "socket.io": "^4.5",
-    "socket.io-client": "^4.5",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1",
     "twilio": "^5.12.2",
-    "validator": "^13.9",
-    "winston": "^3.8",
-    "ws": "^8.14"
+    "winston": "^3.8"
   },
   "devDependencies": {
     "eslint": "^8.55.0",

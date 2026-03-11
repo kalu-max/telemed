@@ -1,6 +1,9 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 import 'api_client.dart';
 
 /// Shows all prescriptions for the logged-in patient, loaded from the backend.
@@ -191,6 +194,91 @@ Instructions: ${p['instructions'] ?? 'None'}
     );
   }
 
+  Future<void> _sharePdf() async {
+    final p = widget.prescription;
+    final doctorName =
+        p['doctorName']?.toString() ?? p['doctorId']?.toString() ?? 'Doctor';
+    final diagnosis = p['diagnosis']?.toString() ?? '';
+    final date = _formatDate(p['createdAt'] ?? p['date']);
+    final meds = _medications();
+    final instructions = p['instructions']?.toString() ?? '';
+    final id = p['prescriptionId']?.toString() ?? 'rx';
+
+    final pdf = pw.Document();
+    pdf.addPage(pw.Page(
+      pageFormat: PdfPageFormat.a4,
+      margin: const pw.EdgeInsets.all(32),
+      build: (ctx) => pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Center(
+            child: pw.Text('MEDICAL PRESCRIPTION',
+                style: pw.TextStyle(
+                    fontSize: 18, fontWeight: pw.FontWeight.bold)),
+          ),
+          pw.Divider(thickness: 2),
+          pw.SizedBox(height: 8),
+          pw.Text('Doctor: $doctorName',
+              style: pw.TextStyle(
+                  fontSize: 12, fontWeight: pw.FontWeight.bold)),
+          pw.Text('Date: $date', style: const pw.TextStyle(fontSize: 10)),
+          pw.SizedBox(height: 8),
+          if (diagnosis.isNotEmpty) ...[
+            pw.Text('Diagnosis',
+                style: pw.TextStyle(
+                    fontSize: 11,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.teal800)),
+            pw.Text(diagnosis, style: const pw.TextStyle(fontSize: 10)),
+            pw.SizedBox(height: 8),
+          ],
+          pw.Text('Medications',
+              style: pw.TextStyle(
+                  fontSize: 11,
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfColors.teal800)),
+          pw.SizedBox(height: 4),
+          if (meds.isEmpty)
+            pw.Text('No medications listed.',
+                style: const pw.TextStyle(fontSize: 10))
+          else
+            pw.TableHelper.fromTextArray(
+              headerStyle:
+                  pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
+              cellStyle: const pw.TextStyle(fontSize: 9),
+              headerDecoration:
+                  const pw.BoxDecoration(color: PdfColors.grey200),
+              headers: ['#', 'Medicine', 'Dosage', 'Frequency', 'Duration'],
+              data: List.generate(meds.length, (i) {
+                final m = meds[i] as Map<String, dynamic>;
+                return [
+                  '${i + 1}',
+                  m['name']?.toString() ??
+                      m['medName']?.toString() ??
+                      'Medicine',
+                  m['dosage']?.toString() ?? '-',
+                  m['frequency']?.toString() ?? '-',
+                  m['duration']?.toString() ?? '-',
+                ];
+              }),
+            ),
+          if (instructions.isNotEmpty) ...[
+            pw.SizedBox(height: 12),
+            pw.Text('Instructions',
+                style: pw.TextStyle(
+                    fontSize: 11,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.teal800)),
+            pw.Text(instructions, style: const pw.TextStyle(fontSize: 10)),
+          ],
+        ],
+      ),
+    ));
+
+    final bytes = await pdf.save();
+    await Printing.sharePdf(bytes: bytes, filename: 'prescription_$id.pdf');
+  }
+
   @override
   Widget build(BuildContext context) {
     final p = widget.prescription;
@@ -313,7 +401,7 @@ Instructions: ${p['instructions'] ?? 'None'}
                 ),
               ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
               child: SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
@@ -323,6 +411,21 @@ Instructions: ${p['instructions'] ?? 'None'}
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.teal[700],
                     side: BorderSide(color: Colors.teal[300]!),
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  icon: const Icon(Icons.picture_as_pdf, size: 16),
+                  label: const Text('Download PDF'),
+                  onPressed: _sharePdf,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.teal[700],
+                    foregroundColor: Colors.white,
                   ),
                 ),
               ),

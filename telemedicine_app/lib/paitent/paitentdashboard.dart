@@ -8,6 +8,7 @@ import 'notifications.dart';
 import 'calendar.dart';
 import 'chat_list.dart';
 import 'consultation_history_screen.dart';
+import 'medical_records_screen.dart';
 import '../communication/widgets/call_widgets.dart' as web;
 
 class PatientDashboard extends StatefulWidget {
@@ -466,6 +467,24 @@ class _PatientDashboardState extends State<PatientDashboard> {
                 context,
                 MaterialPageRoute(
                   builder: (_) => ConsultationHistoryScreen(api: api),
+                ),
+              );
+            },
+          ),
+          const SizedBox(width: 16),
+          _quickActionCard(
+            Icons.folder_shared,
+            'Medical\nRecords',
+            onTap: () {
+              final api = _api;
+              if (api == null) {
+                _showApiUnavailableMessage();
+                return;
+              }
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => MedicalRecordsScreen(api: api),
                 ),
               );
             },
@@ -937,6 +956,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
                       bloodType: 'O+',
                       address: 'Update your address',
                     ),
+                api: _api,
               ),
             ),
           );
@@ -975,7 +995,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
                 context,
                 MaterialPageRoute(
                   builder: (context) =>
-                      ProfileScreen(userProfile: widget.userProfile!),
+                      ProfileScreen(userProfile: widget.userProfile!, api: _api),
                 ),
               );
             }

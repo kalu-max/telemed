@@ -766,6 +766,74 @@ class TeleMedicineApiClient {
     }
   }
 
+  Future<ApiResponse<Map<String, dynamic>>> sendChatMedia(
+    String chatId,
+    String filePath,
+  ) async {
+    try {
+      final formData = FormData.fromMap({
+        'image': await MultipartFile.fromFile(filePath),
+      });
+      final response = await _dio.post(
+        '/api/chats/$chatId/message/media',
+        data: formData,
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return ApiResponse(success: true, data: Map<String, dynamic>.from(response.data ?? {}));
+      }
+      return ApiResponse(success: false, error: response.data['error']);
+    } on DioException catch (e) {
+      return ApiResponse(success: false, error: e.message ?? 'Error uploading media');
+    }
+  }
+
+  Future<ApiResponse<Map<String, dynamic>>> updatePatientProfile(
+    String patientId,
+    Map<String, dynamic> profileData,
+  ) async {
+    try {
+      final response = await _dio.put('/api/users/patients/$patientId', data: profileData);
+      if (response.statusCode == 200) {
+        return ApiResponse(success: true, data: Map<String, dynamic>.from(response.data ?? {}));
+      }
+      return ApiResponse(success: false, error: response.data['error']);
+    } on DioException catch (e) {
+      return ApiResponse(success: false, error: e.message ?? 'Error updating profile');
+    }
+  }
+
+  Future<ApiResponse<Map<String, dynamic>>> requestPasswordOtp(String email) async {
+    try {
+      final response = await _dio.post('/api/auth/request-otp', data: {'email': email});
+      if (response.statusCode == 200) {
+        return ApiResponse(success: true, data: Map<String, dynamic>.from(response.data ?? {}));
+      }
+      return ApiResponse(success: false, error: response.data['error']);
+    } on DioException catch (e) {
+      return ApiResponse(success: false, error: e.message ?? 'Error requesting OTP');
+    }
+  }
+
+  Future<ApiResponse<Map<String, dynamic>>> resetPasswordWithOtp(
+    String email,
+    String otp,
+    String newPassword,
+  ) async {
+    try {
+      final response = await _dio.post('/api/auth/reset-password', data: {
+        'email': email,
+        'otp': otp,
+        'newPassword': newPassword,
+      });
+      if (response.statusCode == 200) {
+        return ApiResponse(success: true, data: Map<String, dynamic>.from(response.data ?? {}));
+      }
+      return ApiResponse(success: false, error: response.data['error']);
+    } on DioException catch (e) {
+      return ApiResponse(success: false, error: e.message ?? 'Error resetting password');
+    }
+  }
+
   Future<ApiResponse<Map<String, dynamic>>> uploadReport(
     String appointmentId,
     String filePath,
@@ -1025,6 +1093,212 @@ class TeleMedicineApiClient {
             e.message ??
             'Network error',
       );
+    }
+  }
+
+  // ---- Doctor Availability Slots ----
+
+  Future<ApiResponse<Map<String, dynamic>>> getDoctorAvailability(String doctorId) async {
+    try {
+      final response = await _dio.get('/api/users/doctors/$doctorId/availability');
+      if (response.statusCode == 200) {
+        return ApiResponse(success: true, data: Map<String, dynamic>.from(response.data ?? {}));
+      }
+      return ApiResponse(success: false, error: response.data['error']);
+    } on DioException catch (e) {
+      return ApiResponse(success: false, error: e.message ?? 'Error fetching availability');
+    }
+  }
+
+  Future<ApiResponse<Map<String, dynamic>>> getDoctorTimeSlots(String doctorId, String date) async {
+    try {
+      final response = await _dio.get('/api/users/doctors/$doctorId/slots', queryParameters: {'date': date});
+      if (response.statusCode == 200) {
+        return ApiResponse(success: true, data: Map<String, dynamic>.from(response.data ?? {}));
+      }
+      return ApiResponse(success: false, error: response.data['error']);
+    } on DioException catch (e) {
+      return ApiResponse(success: false, error: e.message ?? 'Error fetching time slots');
+    }
+  }
+
+  // ---- Search ----
+
+  Future<ApiResponse<Map<String, dynamic>>> search(String query) async {
+    try {
+      final response = await _dio.get('/api/users/search', queryParameters: {'q': query});
+      if (response.statusCode == 200) {
+        return ApiResponse(success: true, data: Map<String, dynamic>.from(response.data ?? {}));
+      }
+      return ApiResponse(success: false, error: response.data['error']);
+    } on DioException catch (e) {
+      return ApiResponse(success: false, error: e.message ?? 'Error searching');
+    }
+  }
+
+  // ---- File sharing in chat ----
+
+  Future<ApiResponse<Map<String, dynamic>>> sendChatFile(
+    String chatId,
+    String filePath,
+    {String? caption}
+  ) async {
+    try {
+      final formData = FormData.fromMap({
+        'file': await MultipartFile.fromFile(filePath),
+        if (caption != null) 'caption': caption, // ignore: use_null_aware_elements
+      });
+      final response = await _dio.post(
+        '/api/chats/$chatId/message/file',
+        data: formData,
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return ApiResponse(success: true, data: Map<String, dynamic>.from(response.data ?? {}));
+      }
+      return ApiResponse(success: false, error: response.data['error']);
+    } on DioException catch (e) {
+      return ApiResponse(success: false, error: e.message ?? 'Error uploading file');
+    }
+  }
+
+  // ---- FCM Token Registration ----
+
+  Future<ApiResponse<Map<String, dynamic>>> registerFcmToken(String token) async {
+    try {
+      final response = await _dio.post('/api/users/fcm-token', data: {'token': token});
+      if (response.statusCode == 200) {
+        return ApiResponse(success: true, data: Map<String, dynamic>.from(response.data ?? {}));
+      }
+      return ApiResponse(success: false, error: response.data['error']);
+    } on DioException catch (e) {
+      return ApiResponse(success: false, error: e.message ?? 'Error registering FCM token');
+    }
+  }
+
+  // ---- Missed Calls ----
+
+  Future<ApiResponse<Map<String, dynamic>>> getMissedCalls() async {
+    try {
+      final response = await _dio.get('/api/calls/missed');
+      if (response.statusCode == 200) {
+        return ApiResponse(success: true, data: Map<String, dynamic>.from(response.data ?? {}));
+      }
+      return ApiResponse(success: false, error: response.data['error']);
+    } on DioException catch (e) {
+      return ApiResponse(success: false, error: e.message ?? 'Error fetching missed calls');
+    }
+  }
+
+  Future<ApiResponse<Map<String, dynamic>>> requestCallback({
+    required String targetUserId,
+    required String type,
+    String? message,
+  }) async {
+    try {
+      final response = await _dio.post('/api/calls/callback-request', data: {
+        'targetUserId': targetUserId,
+        'type': type,
+        if (message != null) 'message': message, // ignore: use_null_aware_elements
+      });
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return ApiResponse(success: true, data: Map<String, dynamic>.from(response.data ?? {}));
+      }
+      return ApiResponse(success: false, error: response.data['error']);
+    } on DioException catch (e) {
+      return ApiResponse(success: false, error: e.message ?? 'Error requesting callback');
+    }
+  }
+
+  // ---- Medical Records ----
+
+  Future<ApiResponse<Map<String, dynamic>>> getMedicalRecords() async {
+    try {
+      final response = await _dio.get('/api/users/medical-records');
+      if (response.statusCode == 200) {
+        return ApiResponse(success: true, data: Map<String, dynamic>.from(response.data ?? {}));
+      }
+      return ApiResponse(success: false, error: response.data['error']);
+    } on DioException catch (e) {
+      return ApiResponse(success: false, error: e.message ?? 'Error fetching medical records');
+    }
+  }
+
+  // ---- Doctor Reviews ----
+
+  Future<ApiResponse<Map<String, dynamic>>> getDoctorReviews(String doctorId) async {
+    try {
+      final response = await _dio.get('/api/users/doctors/$doctorId/reviews');
+      if (response.statusCode == 200) {
+        return ApiResponse(success: true, data: Map<String, dynamic>.from(response.data ?? {}));
+      }
+      return ApiResponse(success: false, error: response.data['error']);
+    } on DioException catch (e) {
+      return ApiResponse(success: false, error: e.message ?? 'Error fetching reviews');
+    }
+  }
+
+  Future<ApiResponse<Map<String, dynamic>>> submitDoctorReview({
+    required String doctorId,
+    required int rating,
+    String? comment,
+    String? consultationId,
+    bool isAnonymous = false,
+  }) async {
+    try {
+      final response = await _dio.post('/api/users/doctors/$doctorId/reviews', data: {
+        'rating': rating,
+        if (comment != null) 'comment': comment, // ignore: use_null_aware_elements
+        if (consultationId != null) 'consultationId': consultationId, // ignore: use_null_aware_elements
+        'isAnonymous': isAnonymous,
+      });
+      if (response.statusCode == 201) {
+        return ApiResponse(success: true, data: Map<String, dynamic>.from(response.data ?? {}));
+      }
+      return ApiResponse(success: false, error: response.data['error']);
+    } on DioException catch (e) {
+      return ApiResponse(success: false, error: e.message ?? 'Error submitting review');
+    }
+  }
+
+  // ---- Chat Message Search ----
+
+  Future<ApiResponse<Map<String, dynamic>>> searchChatMessages(String chatId, String query) async {
+    try {
+      final response = await _dio.get('/api/users/chats/$chatId/search', queryParameters: {'q': query});
+      if (response.statusCode == 200) {
+        return ApiResponse(success: true, data: Map<String, dynamic>.from(response.data ?? {}));
+      }
+      return ApiResponse(success: false, error: response.data['error']);
+    } on DioException catch (e) {
+      return ApiResponse(success: false, error: e.message ?? 'Error searching messages');
+    }
+  }
+
+  // ---- Consultation Notes ----
+
+  Future<ApiResponse<Map<String, dynamic>>> getConsultationNotes(String consultationId) async {
+    try {
+      final response = await _dio.get('/api/users/consultations/$consultationId/notes');
+      if (response.statusCode == 200) {
+        return ApiResponse(success: true, data: Map<String, dynamic>.from(response.data ?? {}));
+      }
+      return ApiResponse(success: false, error: response.data['error']);
+    } on DioException catch (e) {
+      return ApiResponse(success: false, error: e.message ?? 'Error fetching notes');
+    }
+  }
+
+  // ---- Patient Data Export (GDPR) ----
+
+  Future<ApiResponse<Map<String, dynamic>>> exportPatientData(String patientId) async {
+    try {
+      final response = await _dio.get('/api/users/patients/$patientId/export');
+      if (response.statusCode == 200) {
+        return ApiResponse(success: true, data: Map<String, dynamic>.from(response.data ?? {}));
+      }
+      return ApiResponse(success: false, error: response.data['error']);
+    } on DioException catch (e) {
+      return ApiResponse(success: false, error: e.message ?? 'Error exporting data');
     }
   }
 }

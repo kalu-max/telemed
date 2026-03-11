@@ -5,6 +5,10 @@ import 'app_config.dart';
 class ServerConfig {
   static const String _serverUrlKey = 'server_url';
 
+  /// Synchronous defaults for use before SharedPreferences is available
+  static String get defaultApiBaseUrl => AppConfig.apiBaseUrl;
+  static String get defaultWsBaseUrl => AppConfig.wsBaseUrl;
+
   static Future<String> getApiBaseUrl() async {
     final prefs = await SharedPreferences.getInstance();
     final savedValue = prefs.getString(_serverUrlKey);

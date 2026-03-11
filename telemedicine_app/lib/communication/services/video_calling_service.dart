@@ -299,6 +299,14 @@ class VideoCallingService {
       return;
     }
 
+    // Apply ICE servers sent by the backend (includes TURN when configured)
+    final iceList = callData['iceServers'];
+    if (iceList is List && iceList.isNotEmpty) {
+      configureIceServers(
+        iceList.map((e) => Map<String, dynamic>.from(e as Map)).toList(),
+      );
+    }
+
     _ensureIncomingCall(callData);
     _storePendingOffer(callData['offer']);
   }

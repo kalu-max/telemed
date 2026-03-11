@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 
+import 'api_client.dart';
 import '../services/user_storage_service.dart';
 import 'login.dart';
 import 'user_model.dart';
 
 class ProfileScreen extends StatefulWidget {
   final UserProfile userProfile;
+  final TeleMedicineApiClient? api;
 
   const ProfileScreen({
     super.key,
     required this.userProfile,
+    this.api,
   });
 
   @override
@@ -19,6 +22,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   bool _isEditing = false;
   bool _isLoggingOut = false;
+  bool _isSaving = false;
 
   late TextEditingController _nameController;
   late TextEditingController _emailController;
@@ -49,6 +53,43 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _addressController.dispose();
     _dobController.dispose();
     super.dispose();
+  }
+
+  Future<void> _saveProfile() async {
+    setState(() => _isSaving = true);
+    final api = widget.api;
+    final userId = api?.currentUserId;
+
+    if (api != null && userId != null) {
+      final resp = await api.updatePatientProfile(userId, {
+        'name': _nameController.text.trim(),
+        'phone': _phoneController.text.trim(),
+        'address': _addressController.text.trim(),
+        'dateOfBirth': _dobController.text.trim(),
+        'gender': _selectedGender,
+        'bloodType': _selectedBloodType,
+      });
+      if (!mounted) return;
+      if (resp.success) {
+        setState(() { _isEditing = false; _isSaving = false; });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Profile updated successfully!'), backgroundColor: Colors.teal),
+        );
+      } else {
+        setState(() => _isSaving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(resp.error?.toString() ?? 'Save failed'), backgroundColor: Colors.red),
+        );
+      }
+    } else {
+      // No API available — local-only save
+      setState(() { _isEditing = false; _isSaving = false; });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Profile updated locally'), backgroundColor: Colors.teal),
+        );
+      }
+    }
   }
 
   @override
@@ -179,16 +220,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       const SizedBox(width: 16),
                       Expanded(
                         child: ElevatedButton(
-                          onPressed: () {
-                            // Save changes
-                            setState(() => _isEditing = false);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Profile updated successfully!'),
-                                backgroundColor: Colors.teal,
-                              ),
-                            );
-                          },
+                          onPressed: _isSaving ? null : _saveProfile,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.teal,
                             padding: const EdgeInsets.symmetric(vertical: 14),
@@ -196,7 +228,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               borderRadius: BorderRadius.circular(8),
                             ),
                           ),
-                          child: const Text(
+                          child: _isSaving
+                              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                              : const Text(
                             'Save Changes',
                             style: TextStyle(
                               color: Colors.white,

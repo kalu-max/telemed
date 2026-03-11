@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'api_client.dart';
+import '../services/notification_service.dart';
 
 class NotificationsScreen extends StatefulWidget {
   final TeleMedicineApiClient api;
@@ -14,14 +15,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   List<Map<String, dynamic>> _notes = [];
   bool _loading = true;
   String? _error;
-
   Timer? _timer;
+  int _lastKnownCount = 0;
 
   @override
   void initState() {
     super.initState();
     _load();
-    // poll every 30 seconds
     _timer = Timer.periodic(const Duration(seconds: 30), (_) => _load());
   }
 
@@ -30,8 +30,22 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     final resp = await widget.api.getNotifications();
     if (!mounted) return;
     if (resp.success && resp.data != null) {
+      final newNotes = resp.data!;
+      // Show local notification for each new item
+      if (newNotes.length > _lastKnownCount && _lastKnownCount > 0) {
+        final newCount = newNotes.length - _lastKnownCount;
+        for (var i = 0; i < newCount; i++) {
+          final n = newNotes[i];
+          NotificationService.instance.show(
+            title: 'New Notification',
+            body: n['message'] as String? ?? 'You have a new notification',
+            id: DateTime.now().millisecondsSinceEpoch % 100000 + i,
+          );
+        }
+      }
+      _lastKnownCount = newNotes.length;
       setState(() {
-        _notes = resp.data!;
+        _notes = newNotes;
         _loading = false;
         _error = null;
       });

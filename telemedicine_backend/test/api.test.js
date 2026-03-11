@@ -1,4 +1,5 @@
 // configuration for tests - must happen before loading server or database modules
+process.env.NODE_ENV = 'test';
 process.env.DB_DIALECT = 'sqlite';
 process.env.DB_STORAGE = ':memory:';
 process.env.FIREBASE_CONFIG = '{}';

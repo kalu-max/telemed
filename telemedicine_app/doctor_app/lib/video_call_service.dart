@@ -4,6 +4,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
 
 import 'config/app_config.dart';
+import 'services/notification_service.dart';
 
 enum CallStatus { idle, ringing, connecting, connected, ended }
 
@@ -126,6 +127,14 @@ class DoctorVideoCallService extends ChangeNotifier {
         data['patientName']?.toString() ??
         'Patient';
 
+    // Apply ICE servers sent by the backend (includes TURN when configured)
+    final iceList = data['iceServers'];
+    if (iceList is List && iceList.isNotEmpty) {
+      configureIceServers(
+        iceList.map((e) => Map<String, dynamic>.from(e as Map)).toList(),
+      );
+    }
+
     // Store SDP offer if provided (patient sent it with initiateCall)
     final offerRaw = data['offer'];
     if (offerRaw is String && offerRaw.isNotEmpty) {
@@ -141,6 +150,13 @@ class DoctorVideoCallService extends ChangeNotifier {
     _remoteUserName = callerName;
     _callStatus = CallStatus.ringing;
     notifyListeners();
+
+    // Show local notification for incoming call
+    NotificationService.instance.show(
+      title: 'Incoming Call',
+      body: '$callerName is calling you',
+      id: callId.hashCode % 100000,
+    );
 
     onIncomingCall?.call(callId, callerId, callerName);
   }

@@ -72,7 +72,7 @@ function initializeCommunicationSocket(io) {
 
     try {
       if (token) {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
         userId = decoded.userId || decoded.id;
         role = decoded.role || role;
       }

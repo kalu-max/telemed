@@ -120,11 +120,13 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _showForgotPasswordDialog() {
     final emailCtrl = TextEditingController(text: _emailController.text.trim());
+    final otpCtrl = TextEditingController();
     final newPassCtrl = TextEditingController();
     final confirmPassCtrl = TextEditingController();
     bool obscureNew = true;
     bool obscureConfirm = true;
     bool isLoading = false;
+    bool otpSent = false;
 
     showDialog(
       context: context,
@@ -138,59 +140,63 @@ class _LoginScreenState extends State<LoginScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Enter your registered email and choose a new password.',
-                      style: TextStyle(fontSize: 13, color: Colors.grey),
+                    Text(
+                      otpSent
+                          ? 'Enter the OTP sent to your email and choose a new password.'
+                          : 'Enter your registered email to receive an OTP.',
+                      style: const TextStyle(fontSize: 13, color: Colors.grey),
                     ),
                     const SizedBox(height: 16),
                     TextField(
                       controller: emailCtrl,
                       keyboardType: TextInputType.emailAddress,
+                      enabled: !otpSent,
                       decoration: const InputDecoration(
                         labelText: 'Email Address',
                         prefixIcon: Icon(Icons.email_outlined),
                         border: OutlineInputBorder(),
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: newPassCtrl,
-                      obscureText: obscureNew,
-                      decoration: InputDecoration(
-                        labelText: 'New Password',
-                        prefixIcon: const Icon(Icons.lock_outline),
-                        border: const OutlineInputBorder(),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            obscureNew
-                                ? Icons.visibility_off
-                                : Icons.visibility,
-                          ),
-                          onPressed: () =>
-                              setStateDialog(() => obscureNew = !obscureNew),
+                    if (otpSent) ...[
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: otpCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'OTP Code',
+                          prefixIcon: Icon(Icons.pin),
+                          border: OutlineInputBorder(),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: confirmPassCtrl,
-                      obscureText: obscureConfirm,
-                      decoration: InputDecoration(
-                        labelText: 'Confirm New Password',
-                        prefixIcon: const Icon(Icons.lock_outline),
-                        border: const OutlineInputBorder(),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            obscureConfirm
-                                ? Icons.visibility_off
-                                : Icons.visibility,
-                          ),
-                          onPressed: () => setStateDialog(
-                            () => obscureConfirm = !obscureConfirm,
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: newPassCtrl,
+                        obscureText: obscureNew,
+                        decoration: InputDecoration(
+                          labelText: 'New Password',
+                          prefixIcon: const Icon(Icons.lock_outline),
+                          border: const OutlineInputBorder(),
+                          suffixIcon: IconButton(
+                            icon: Icon(obscureNew ? Icons.visibility_off : Icons.visibility),
+                            onPressed: () => setStateDialog(() => obscureNew = !obscureNew),
                           ),
                         ),
                       ),
-                    ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: confirmPassCtrl,
+                        obscureText: obscureConfirm,
+                        decoration: InputDecoration(
+                          labelText: 'Confirm New Password',
+                          prefixIcon: const Icon(Icons.lock_outline),
+                          border: const OutlineInputBorder(),
+                          suffixIcon: IconButton(
+                            icon: Icon(obscureConfirm ? Icons.visibility_off : Icons.visibility),
+                            onPressed: () => setStateDialog(() => obscureConfirm = !obscureConfirm),
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -199,89 +205,93 @@ class _LoginScreenState extends State<LoginScreen> {
                   onPressed: isLoading ? null : () => Navigator.pop(ctx),
                   child: const Text('Cancel'),
                 ),
-                ElevatedButton(
-                  onPressed: isLoading
-                      ? null
-                      : () async {
-                          final email = emailCtrl.text.trim();
-                          final newPass = newPassCtrl.text;
-                          final confirmPass = confirmPassCtrl.text;
+                if (!otpSent)
+                  ElevatedButton(
+                    onPressed: isLoading
+                        ? null
+                        : () async {
+                            final email = emailCtrl.text.trim().toLowerCase();
+                            if (email.isEmpty) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Please enter your email')),
+                              );
+                              return;
+                            }
+                            setStateDialog(() => isLoading = true);
+                            final api = TeleMedicineApiClient(AppConfig.apiBaseUrl);
+                            final resp = await api.requestPasswordOtp(email);
+                            setStateDialog(() => isLoading = false);
+                            if (!ctx.mounted) return;
+                            if (resp.success) {
+                              setStateDialog(() => otpSent = true);
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('OTP sent! Check your email.'), backgroundColor: Colors.blue),
+                                );
+                              }
+                            } else {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(resp.error?.toString() ?? 'Failed to send OTP')),
+                                );
+                              }
+                            }
+                          },
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.teal),
+                    child: isLoading
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Text('Send OTP', style: TextStyle(color: Colors.white)),
+                  )
+                else
+                  ElevatedButton(
+                    onPressed: isLoading
+                        ? null
+                        : () async {
+                            final email = emailCtrl.text.trim().toLowerCase();
+                            final otp = otpCtrl.text.trim();
+                            final newPass = newPassCtrl.text;
+                            final confirmPass = confirmPassCtrl.text;
 
-                          if (email.isEmpty ||
-                              newPass.isEmpty ||
-                              confirmPass.isEmpty) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Please fill in all fields'),
-                              ),
-                            );
-                            return;
-                          }
-                          if (newPass.length < 6) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Password must be at least 6 characters',
-                                ),
-                              ),
-                            );
-                            return;
-                          }
-                          if (newPass != confirmPass) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Passwords do not match'),
-                              ),
-                            );
-                            return;
-                          }
+                            if (otp.isEmpty || newPass.isEmpty || confirmPass.isEmpty) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Please fill in all fields')),
+                              );
+                              return;
+                            }
+                            if (newPass.length < 6) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Password must be at least 6 characters')),
+                              );
+                              return;
+                            }
+                            if (newPass != confirmPass) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Passwords do not match')),
+                              );
+                              return;
+                            }
 
-                          setStateDialog(() => isLoading = true);
-                          final api = TeleMedicineApiClient(
-                            AppConfig.apiBaseUrl,
-                          );
-                          final resp = await api.resetPassword(
-                            email: email,
-                            newPassword: newPass,
-                          );
-                          setStateDialog(() => isLoading = false);
+                            setStateDialog(() => isLoading = true);
+                            final api = TeleMedicineApiClient(AppConfig.apiBaseUrl);
+                            final resp = await api.resetPasswordWithOtp(email, otp, newPass);
+                            setStateDialog(() => isLoading = false);
 
-                          if (!ctx.mounted) return;
-                          Navigator.pop(ctx);
+                            if (!ctx.mounted) return;
+                            Navigator.pop(ctx);
 
-                          final success = resp.success;
-                          final msg = success
-                              ? 'Password reset successfully. Please log in.'
-                              : (resp.error ?? 'Reset failed');
-                          final color = success ? Colors.green : Colors.red;
+                            final success = resp.success;
+                            final msg = success ? 'Password reset successfully. Please log in.' : (resp.error?.toString() ?? 'Reset failed');
+                            final color = success ? Colors.green : Colors.red;
 
-                          if (!mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(msg),
-                              backgroundColor: color,
-                            ),
-                          );
-
-                          if (success) {
-                            _emailController.text = email;
-                          }
-                        },
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.teal),
-                  child: isLoading
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Text(
-                          'Reset Password',
-                          style: TextStyle(color: Colors.white),
-                        ),
-                ),
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: color));
+                            if (success) _emailController.text = email;
+                          },
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.teal),
+                    child: isLoading
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Text('Reset Password', style: TextStyle(color: Colors.white)),
+                  ),
               ],
             );
           },

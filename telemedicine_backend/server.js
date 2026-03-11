@@ -9,6 +9,13 @@ const jwt = require('jsonwebtoken');
 const path = require('path');
 require('dotenv').config();
 
+// Ensure JWT_SECRET is set — generate one if missing (dev convenience)
+if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'your-secret-key') {
+  const crypto = require('crypto');
+  process.env.JWT_SECRET = crypto.randomBytes(32).toString('hex');
+  console.warn('[SECURITY] JWT_SECRET was missing or default. Generated a random secret for this session. Set JWT_SECRET in .env for production.');
+}
+
 // Database imports
 const { sequelize, syncDatabase } = require('./server/config/database');
 const { firestore, firebaseAuth } = require('./server/config/firebase');
@@ -58,6 +65,19 @@ const io = socketIO(server, {
 // Middleware
 app.use(helmet());
 app.use(morgan('combined'));
+
+// HTTPS enforcement in production (behind reverse proxy like Render, Heroku, etc.)
+if (process.env.NODE_ENV === 'production') {
+  app.use((req, res, next) => {
+    if (req.headers['x-forwarded-proto'] !== 'https') {
+      return res.redirect(301, `https://${req.headers.host}${req.url}`);
+    }
+    // Strict-Transport-Security (HSTS)
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    next();
+  });
+}
+
 app.use(cors({
   origin: (origin, callback) => {
     if (isOriginAllowed(origin)) {
@@ -73,6 +93,15 @@ app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // Serve static files from public directory (for doctor portal)
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Swagger API documentation
+const swaggerUi = require('swagger-ui-express');
+const swaggerSpec = require('./server/config/swagger');
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  customCss: '.swagger-ui .topbar { display: none }',
+  customSiteTitle: 'Telemedicine API Docs',
+}));
+app.get('/api-docs.json', (req, res) => res.json(swaggerSpec));
 
 // Rate limiting
 const apiLimiter = rateLimit({
@@ -120,7 +149,7 @@ io.use((socket, next) => {
   const token = socket.handshake.auth.token;
   if (token) {
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
       socket.userId = decoded.userId;
       socket.doctorId = decoded.doctorId;
       socket.role = decoded.role;
@@ -165,15 +194,28 @@ const initializeApp = async () => {
       logger.info(`🔥 Firebase: ${process.env.FIREBASE_PROJECT_ID || 'Not configured'}`);
       logger.info(`📡 WebRTC Signaling Server active`);
       logger.info(`🔒 CORS enabled for ${process.env.FRONTEND_URL}`);
+      logger.info(`📖 API Docs available at /api-docs`);
     });
+
+    // Start appointment reminder scheduler
+    try {
+      const { startReminderScheduler } = require('./server/services/reminderScheduler');
+      const models = require('./server/models/index');
+      const { pushNotification } = require('./server/api/users');
+      startReminderScheduler(models, pushNotification || (() => {}));
+    } catch (e) {
+      logger.warn(`Reminder scheduler not started: ${e.message}`);
+    }
   } catch (error) {
     logger.error('❌ Failed to initialize application:', error.message);
     process.exit(1);
   }
 };
 
-// Start the application
-initializeApp();
+// Start the application (skip when running tests)
+if (process.env.NODE_ENV !== 'test') {
+  initializeApp();
+}
 
 // Graceful shutdown
 process.on('SIGTERM', () => {

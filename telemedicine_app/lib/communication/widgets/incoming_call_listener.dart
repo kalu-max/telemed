@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/call_model.dart';
 import '../providers/communication_providers.dart';
 import 'call_widgets.dart';
+import '../../services/notification_service.dart';
 
 class IncomingCallListener extends StatefulWidget {
   final Widget child;
@@ -29,6 +30,12 @@ class _IncomingCallListenerState extends State<IncomingCallListener> {
     if (isIncomingRinging &&
         !_dialogVisible &&
         _dialogCallId != currentCall.id) {
+      // Show local notification for incoming call
+      NotificationService.instance.show(
+        title: 'Incoming Call',
+        body: '${currentCall.callerName} is calling you',
+        id: currentCall.id.hashCode % 100000,
+      );
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _showIncomingCallDialog(currentCall);
       });

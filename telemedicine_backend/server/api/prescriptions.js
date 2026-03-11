@@ -1,19 +1,40 @@
 const express = require('express');
+const { asyncHandler } = require('../middleware/errorHandler');
+const { Prescription, User } = require('../models/index');
+const logger = require('../utils/logger');
 
 const router = express.Router();
 
-// In-memory prescription store for the lightweight auth/user setup in this backend.
+// In-memory cache (seeded from DB on startup)
 const prescriptions = {};
 const templatesByDoctor = {};
 
-function getUserById(userId) {
+(async () => {
   try {
-    const { users } = require('./auth');
-    return Object.values(users).find((u) => u.userId === userId) || null;
-  } catch (_) {
-    return null;
+    const dbRx = await Prescription.findAll({ order: [['createdAt', 'DESC']] });
+    for (const rx of dbRx) {
+      prescriptions[rx.prescriptionId] = {
+        prescriptionId: rx.prescriptionId,
+        patientId: rx.patientId,
+        patientName: rx.patientName,
+        doctorId: rx.doctorId,
+        doctorName: rx.doctorName,
+        diagnosis: rx.diagnosis,
+        notes: rx.notes || '',
+        medications: rx.medications || [],
+        consultationId: rx.consultationId,
+        consultationDate: rx.consultationDate,
+        status: rx.status || 'active',
+        patientViewed: rx.patientViewed || false,
+        createdAt: rx.createdAt,
+        updatedAt: rx.updatedAt,
+      };
+    }
+    logger.info(`Prescriptions cache seeded: ${Object.keys(prescriptions).length} records`);
+  } catch (e) {
+    logger.warn(`Prescriptions cache seed skipped: ${e.message}`);
   }
-}
+})();
 
 function canAccessPrescription(user, prescription) {
   if (!user) return false;
@@ -21,7 +42,7 @@ function canAccessPrescription(user, prescription) {
   return prescription.patientId === user.userId || prescription.doctorId === user.userId;
 }
 
-router.get('/', (req, res) => {
+router.get('/', asyncHandler(async (req, res) => {
   const requester = req.user;
   if (!requester) return res.status(401).json({ error: 'Unauthorized' });
 
@@ -33,82 +54,58 @@ router.get('/', (req, res) => {
 
   list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-  res.json({
-    success: true,
-    count: list.length,
-    prescriptions: list,
-    data: list,
-  });
-});
+  res.json({ success: true, count: list.length, prescriptions: list, data: list });
+}));
 
-router.post('/', (req, res) => {
+router.post('/', asyncHandler(async (req, res) => {
   const requester = req.user;
   if (!requester) return res.status(401).json({ error: 'Unauthorized' });
   if (requester.role !== 'doctor' && requester.role !== 'admin') {
     return res.status(403).json({ error: 'Only doctors can create prescriptions' });
   }
 
-  const {
-    patientId,
-    patientName,
-    diagnosis,
-    notes,
-    medications,
-    medicines,
-    consultationId,
-    consultationDate,
-  } = req.body;
+  const { patientId, patientName, diagnosis, notes, medications, medicines, consultationId, consultationDate } = req.body;
+  if (!patientId || !diagnosis) return res.status(400).json({ error: 'patientId and diagnosis are required' });
 
-  if (!patientId || !diagnosis) {
-    return res.status(400).json({ error: 'patientId and diagnosis are required' });
-  }
+  let resolvedPatientName = patientName || patientId;
+  try { const u = await User.findByPk(patientId); if (u) resolvedPatientName = u.name || resolvedPatientName; } catch (_) {}
 
-  const patientUser = getUserById(patientId);
-  const doctorUser = getUserById(requester.userId);
-
-  const normalizedMeds = Array.isArray(medications)
-    ? medications
-    : Array.isArray(medicines)
-      ? medicines
-      : [];
-
+  const normalizedMeds = Array.isArray(medications) ? medications : Array.isArray(medicines) ? medicines : [];
   const prescriptionId = `rx_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const now = new Date().toISOString();
 
   const prescription = {
-    prescriptionId,
-    patientId,
-    patientName: patientName || patientUser?.name || patientId,
+    prescriptionId, patientId,
+    patientName: resolvedPatientName,
     doctorId: requester.userId,
-    doctorName: requester.name || doctorUser?.name || 'Doctor',
-    diagnosis,
-    notes: notes || '',
+    doctorName: requester.name || 'Doctor',
+    diagnosis, notes: notes || '',
     medications: normalizedMeds,
     consultationId: consultationId || null,
     consultationDate: consultationDate || null,
-    status: 'active',
-    patientViewed: false,
-    createdAt: now,
-    updatedAt: now,
+    status: 'active', patientViewed: false,
+    createdAt: now, updatedAt: now,
   };
 
   prescriptions[prescriptionId] = prescription;
 
-  res.status(201).json({
-    success: true,
-    message: 'Prescription created successfully',
-    prescription,
-    data: prescription,
-  });
-});
+  try {
+    await Prescription.create({
+      prescriptionId, patientId, patientName: prescription.patientName,
+      doctorId: prescription.doctorId, doctorName: prescription.doctorName,
+      diagnosis, notes: prescription.notes, medications: normalizedMeds,
+      consultationId: prescription.consultationId, consultationDate: prescription.consultationDate,
+      status: 'active', patientViewed: false,
+    });
+  } catch (e) { logger.warn(`Prescription DB create: ${e.message}`); }
+
+  res.status(201).json({ success: true, message: 'Prescription created successfully', prescription, data: prescription });
+}));
 
 router.get('/templates', (req, res) => {
   const requester = req.user;
   if (!requester) return res.status(401).json({ error: 'Unauthorized' });
-  if (requester.role !== 'doctor' && requester.role !== 'admin') {
-    return res.status(403).json({ error: 'Only doctors can access templates' });
-  }
-
+  if (requester.role !== 'doctor' && requester.role !== 'admin') return res.status(403).json({ error: 'Only doctors can access templates' });
   const list = templatesByDoctor[requester.userId] || [];
   res.json({ success: true, data: list });
 });
@@ -116,65 +113,39 @@ router.get('/templates', (req, res) => {
 router.post('/templates', (req, res) => {
   const requester = req.user;
   if (!requester) return res.status(401).json({ error: 'Unauthorized' });
-  if (requester.role !== 'doctor' && requester.role !== 'admin') {
-    return res.status(403).json({ error: 'Only doctors can create templates' });
-  }
-
+  if (requester.role !== 'doctor' && requester.role !== 'admin') return res.status(403).json({ error: 'Only doctors can create templates' });
   const { templateName, templateDescription, medicines, diagnosis, additionalInstructions, isPublic } = req.body;
-  if (!templateName) {
-    return res.status(400).json({ error: 'templateName is required' });
-  }
-
-  if (!templatesByDoctor[requester.userId]) {
-    templatesByDoctor[requester.userId] = [];
-  }
-
+  if (!templateName) return res.status(400).json({ error: 'templateName is required' });
+  if (!templatesByDoctor[requester.userId]) templatesByDoctor[requester.userId] = [];
   const template = {
     templateId: `tpl_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-    doctorId: requester.userId,
-    templateName,
+    doctorId: requester.userId, templateName,
     templateDescription: templateDescription || '',
     medicines: Array.isArray(medicines) ? medicines : [],
-    diagnosis: diagnosis || '',
-    additionalInstructions: additionalInstructions || '',
-    isPublic: Boolean(isPublic),
-    createdAt: new Date().toISOString(),
+    diagnosis: diagnosis || '', additionalInstructions: additionalInstructions || '',
+    isPublic: Boolean(isPublic), createdAt: new Date().toISOString(),
   };
-
   templatesByDoctor[requester.userId].push(template);
   res.status(201).json({ success: true, data: template });
 });
 
-router.get('/:prescriptionId', (req, res) => {
+router.get('/:prescriptionId', asyncHandler(async (req, res) => {
   const requester = req.user;
   if (!requester) return res.status(401).json({ error: 'Unauthorized' });
-
   const { prescriptionId } = req.params;
   const prescription = prescriptions[prescriptionId];
-  if (!prescription) {
-    return res.status(404).json({ error: 'Prescription not found' });
-  }
-
-  if (!canAccessPrescription(requester, prescription)) {
-    return res.status(403).json({ error: 'Access denied' });
-  }
-
+  if (!prescription) return res.status(404).json({ error: 'Prescription not found' });
+  if (!canAccessPrescription(requester, prescription)) return res.status(403).json({ error: 'Access denied' });
   res.json({ success: true, prescription, data: prescription });
-});
+}));
 
-router.put('/:prescriptionId', (req, res) => {
+router.put('/:prescriptionId', asyncHandler(async (req, res) => {
   const requester = req.user;
   if (!requester) return res.status(401).json({ error: 'Unauthorized' });
-
   const { prescriptionId } = req.params;
   const prescription = prescriptions[prescriptionId];
-  if (!prescription) {
-    return res.status(404).json({ error: 'Prescription not found' });
-  }
-
-  if (requester.role !== 'admin' && prescription.doctorId !== requester.userId) {
-    return res.status(403).json({ error: 'Only the issuing doctor can update this prescription' });
-  }
+  if (!prescription) return res.status(404).json({ error: 'Prescription not found' });
+  if (requester.role !== 'admin' && prescription.doctorId !== requester.userId) return res.status(403).json({ error: 'Only the issuing doctor can update this prescription' });
 
   const { status, diagnosis, notes, medications } = req.body;
   if (status) prescription.status = status;
@@ -183,29 +154,27 @@ router.put('/:prescriptionId', (req, res) => {
   if (Array.isArray(medications)) prescription.medications = medications;
   prescription.updatedAt = new Date().toISOString();
 
-  res.json({ success: true, prescription, data: prescription });
-});
+  try { await Prescription.update({ status: prescription.status, diagnosis: prescription.diagnosis, notes: prescription.notes, medications: prescription.medications }, { where: { prescriptionId } }); } catch (_) {}
 
-router.post('/:prescriptionId/mark-viewed', (req, res) => {
+  res.json({ success: true, prescription, data: prescription });
+}));
+
+router.post('/:prescriptionId/mark-viewed', asyncHandler(async (req, res) => {
   const requester = req.user;
   if (!requester) return res.status(401).json({ error: 'Unauthorized' });
-
   const { prescriptionId } = req.params;
   const prescription = prescriptions[prescriptionId];
-  if (!prescription) {
-    return res.status(404).json({ error: 'Prescription not found' });
-  }
-
-  if (requester.role !== 'admin' && prescription.patientId !== requester.userId) {
-    return res.status(403).json({ error: 'Only the patient can mark this as viewed' });
-  }
+  if (!prescription) return res.status(404).json({ error: 'Prescription not found' });
+  if (requester.role !== 'admin' && prescription.patientId !== requester.userId) return res.status(403).json({ error: 'Only the patient can mark this as viewed' });
 
   prescription.patientViewed = true;
   prescription.viewedAt = new Date().toISOString();
   prescription.updatedAt = new Date().toISOString();
 
+  try { await Prescription.update({ patientViewed: true }, { where: { prescriptionId } }); } catch (_) {}
+
   res.json({ success: true, prescription, data: prescription });
-});
+}));
 
 router.get('/:prescriptionId/pdf', (req, res) => {
   const requester = req.user;
