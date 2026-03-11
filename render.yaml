@@ -1,0 +1,54 @@
+services:
+  - type: web
+    name: telemed-backend
+    env: node
+    region: oregon
+    plan: free
+    rootDir: telemedicine_backend
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DB_DIALECT
+        value: postgres
+      - key: DB_HOST
+        fromDatabase:
+          name: telemed-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: telemed-db
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: telemed-db
+          property: database
+      - key: DB_USER
+        fromDatabase:
+          name: telemed-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: telemed-db
+          property: password
+      - key: JWT_SECRET
+        generateValue: true
+      - key: REFRESH_TOKEN_SECRET
+        generateValue: true
+      - key: LOG_LEVEL
+        value: info
+      # --- Set these manually in the Render dashboard after deploy ---
+      # FIREBASE_CONFIG     = paste full service account JSON as a single line
+      # FIREBASE_PROJECT_ID = your Firebase project id
+      # FIREBASE_DATABASE_URL = https://your-project.firebaseio.com
+      # ALLOWED_ORIGINS     = comma-separated URLs of your Flutter app (if hosted)
+
+databases:
+  - name: telemed-db
+    databaseName: telemedicine_db
+    user: telemed_user
+    plan: free
+    region: oregon
