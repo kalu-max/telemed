@@ -46,7 +46,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _addSlot() async {
-    int? dayOfWeek;
+    Set<int> selectedDays = {};
     TimeOfDay startTime = const TimeOfDay(hour: 9, minute: 0);
     TimeOfDay endTime = const TimeOfDay(hour: 17, minute: 0);
 
@@ -56,42 +56,65 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return StatefulBuilder(builder: (ctx, setDialogState) {
           return AlertDialog(
             title: const Text('Add Availability Slot'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                DropdownButtonFormField<int>(
-                  decoration: const InputDecoration(labelText: 'Day of Week'),
-                  initialValue: dayOfWeek,
-                  items: List.generate(7, (i) => DropdownMenuItem(value: i, child: Text(_dayNames[i]))),
-                  onChanged: (v) => setDialogState(() => dayOfWeek = v),
-                ),
-                const SizedBox(height: 12),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text('Start: ${startTime.format(ctx)}'),
-                  trailing: const Icon(Icons.access_time),
-                  onTap: () async {
-                    final t = await showTimePicker(context: ctx, initialTime: startTime);
-                    if (t != null) setDialogState(() => startTime = t);
-                  },
-                ),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text('End: ${endTime.format(ctx)}'),
-                  trailing: const Icon(Icons.access_time),
-                  onTap: () async {
-                    final t = await showTimePicker(context: ctx, initialTime: endTime);
-                    if (t != null) setDialogState(() => endTime = t);
-                  },
-                ),
-              ],
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Select Days',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  ...List.generate(7, (i) {
+                    return CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(_dayNames[i]),
+                      value: selectedDays.contains(i),
+                      onChanged: (checked) {
+                        setDialogState(() {
+                          if (checked == true) {
+                            selectedDays.add(i);
+                          } else {
+                            selectedDays.remove(i);
+                          }
+                        });
+                      },
+                    );
+                  }),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Time Range',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text('Start: ${startTime.format(ctx)}'),
+                    trailing: const Icon(Icons.access_time),
+                    onTap: () async {
+                      final t = await showTimePicker(context: ctx, initialTime: startTime);
+                      if (t != null) setDialogState(() => startTime = t);
+                    },
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text('End: ${endTime.format(ctx)}'),
+                    trailing: const Icon(Icons.access_time),
+                    onTap: () async {
+                      final t = await showTimePicker(context: ctx, initialTime: endTime);
+                      if (t != null) setDialogState(() => endTime = t);
+                    },
+                  ),
+                ],
+              ),
             ),
             actions: [
               TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
               ElevatedButton(
-                onPressed: dayOfWeek != null ? () {
+                onPressed: selectedDays.isNotEmpty ? () {
                   Navigator.pop(ctx, {
-                    'dayOfWeek': dayOfWeek,
+                    'daysOfWeek': selectedDays.toList(),
                     'startTime': '${startTime.hour.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}',
                     'endTime': '${endTime.hour.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}',
                     'slotDurationMinutes': 30,
@@ -106,12 +129,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
 
     if (result != null) {
-      final newSlots = [..._availabilitySlots.map((s) => {
-        'dayOfWeek': s['dayOfWeek'],
-        'startTime': s['startTime'],
-        'endTime': s['endTime'],
-        'slotDurationMinutes': s['slotDurationMinutes'] ?? 30,
-      }), result];
+      final newSlots = [
+        ..._availabilitySlots.map((s) {
+          // Support both old single-day and new multi-day formats
+          if (s.containsKey('daysOfWeek')) {
+            return {
+              'daysOfWeek': s['daysOfWeek'],
+              'startTime': s['startTime'],
+              'endTime': s['endTime'],
+              'slotDurationMinutes': s['slotDurationMinutes'] ?? 30,
+            };
+          } else {
+            return {
+              'daysOfWeek': [s['dayOfWeek']],
+              'startTime': s['startTime'],
+              'endTime': s['endTime'],
+              'slotDurationMinutes': s['slotDurationMinutes'] ?? 30,
+            };
+          }
+        }),
+        result,
+      ];
       
       final doctorId = widget.api.currentUserId;
       if (doctorId == null) return;
@@ -128,11 +166,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _removeSlot(int index) async {
     final newSlots = _availabilitySlots.asMap().entries
         .where((e) => e.key != index)
-        .map((e) => {
-          'dayOfWeek': e.value['dayOfWeek'],
-          'startTime': e.value['startTime'],
-          'endTime': e.value['endTime'],
-          'slotDurationMinutes': e.value['slotDurationMinutes'] ?? 30,
+        .map((e) {
+          // Support both old single-day and new multi-day formats
+          if (e.value.containsKey('daysOfWeek')) {
+            return {
+              'daysOfWeek': e.value['daysOfWeek'],
+              'startTime': e.value['startTime'],
+              'endTime': e.value['endTime'],
+              'slotDurationMinutes': e.value['slotDurationMinutes'] ?? 30,
+            };
+          } else {
+            return {
+              'daysOfWeek': [e.value['dayOfWeek']],
+              'startTime': e.value['startTime'],
+              'endTime': e.value['endTime'],
+              'slotDurationMinutes': e.value['slotDurationMinutes'] ?? 30,
+            };
+          }
         })
         .toList();
 
@@ -286,11 +336,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         children: _availabilitySlots.asMap().entries.map((entry) {
                           final i = entry.key;
                           final slot = entry.value;
-                          final dayIdx = slot['dayOfWeek'] is int ? slot['dayOfWeek'] as int : 0;
-                          final dayName = dayIdx >= 0 && dayIdx < 7 ? _dayNames[dayIdx] : 'Unknown';
+                          
+                          // Support both old single-day and new multi-day formats
+                          List<int> days = [];
+                          if (slot.containsKey('daysOfWeek')) {
+                            days = (slot['daysOfWeek'] as List?)?.cast<int>() ?? [];
+                          } else if (slot.containsKey('dayOfWeek')) {
+                            days = [slot['dayOfWeek'] as int];
+                          }
+                          
+                          final dayNames = days
+                              .map((d) => d >= 0 && d < 7 ? _dayNames[d] : 'Unknown')
+                              .join(', ');
+                          
                           return ListTile(
                             leading: const Icon(Icons.access_time, color: Colors.blue),
-                            title: Text(dayName),
+                            title: Text(dayNames.isNotEmpty ? dayNames : 'Unknown'),
                             subtitle: Text('${slot['startTime']} - ${slot['endTime']}'),
                             trailing: IconButton(
                               icon: const Icon(Icons.delete_outline, color: Colors.red),
