@@ -94,3 +94,31 @@ jobs:
       - run: npm run migrate:status
         env:
           NODE_ENV: test
+
+  # ── Backend Deploy (Render) ───────────────────────────────────────
+  deploy-backend:
+    runs-on: ubuntu-latest
+    needs: [backend, patient-app, doctor-app, migrations]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Wait for backend health check
+        env:
+          PUBLIC_BACKEND_URL: https://telemed-backend.onrender.com
+        run: |
+          echo "Render autoDeploy is enabled via render.yaml; validating public backend readiness."
+          HEALTH_URL="${PUBLIC_BACKEND_URL%/}/health"
+          echo "Checking health endpoint: $HEALTH_URL"
+
+          for attempt in $(seq 1 20); do
+            if curl --fail --silent "$HEALTH_URL" >/dev/null; then
+              echo "Backend is healthy."
+              exit 0
+            fi
+
+            echo "Attempt $attempt/20 failed. Waiting 20 seconds..."
+            sleep 20
+          done
+
+          echo "Backend health check failed. Verify Render service status and deployment logs."
+          exit 1

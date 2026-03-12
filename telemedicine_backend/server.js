@@ -34,16 +34,34 @@ const logger = require('./server/utils/logger');
 const app = express();
 const server = http.createServer(app);
 
+// Required for correct HTTPS detection behind reverse proxies (Render, Heroku, etc.).
+app.set('trust proxy', 1);
+
 // Build allowed-origins list from env var (comma-separated) plus always allow localhost
-const _extraOrigins = (process.env.ALLOWED_ORIGINS || '')
+const _rawAllowedOrigins = (process.env.ALLOWED_ORIGINS || '')
   .split(',')
   .map((s) => s.trim())
   .filter(Boolean);
+const _allowAnyOrigin = _rawAllowedOrigins.includes('*');
+const _extraOrigins = _rawAllowedOrigins.filter((origin) => origin !== '*');
 
 function isOriginAllowed(origin) {
   if (!origin) return true; // same-origin / non-browser
+  if (_allowAnyOrigin) return true;
   if (origin.includes('localhost') || origin.includes('127.0.0.1')) return true;
   return _extraOrigins.some((o) => origin === o);
+}
+
+function getCorsModeDescription() {
+  if (_allowAnyOrigin) {
+    return 'all origins allowed (*), plus non-browser clients';
+  }
+
+  if (_extraOrigins.length > 0) {
+    return `${_extraOrigins.join(', ')}, plus localhost and non-browser clients`;
+  }
+
+  return 'localhost and non-browser clients only';
 }
 
 const io = socketIO(server, {
@@ -69,8 +87,17 @@ app.use(morgan('combined'));
 // HTTPS enforcement in production (behind reverse proxy like Render, Heroku, etc.)
 if (process.env.NODE_ENV === 'production') {
   app.use((req, res, next) => {
-    if (req.headers['x-forwarded-proto'] !== 'https') {
-      return res.redirect(301, `https://${req.headers.host}${req.url}`);
+    // Keep health checks HTTP-friendly so platform probes don't fail deployment.
+    if (req.path === '/health') {
+      return next();
+    }
+
+    const forwardedProto = req.headers['x-forwarded-proto'];
+    const isHttps = req.secure || forwardedProto === 'https';
+
+    if (!isHttps) {
+      const host = req.headers.host || '';
+      return res.redirect(301, `https://${host}${req.url}`);
     }
     // Strict-Transport-Security (HSTS)
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
@@ -193,7 +220,7 @@ const initializeApp = async () => {
       logger.info(`📊 PostgreSQL: ${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`);
       logger.info(`🔥 Firebase: ${process.env.FIREBASE_PROJECT_ID || 'Not configured'}`);
       logger.info(`📡 WebRTC Signaling Server active`);
-      logger.info(`🔒 CORS enabled for ${process.env.FRONTEND_URL}`);
+      logger.info(`🔒 CORS mode: ${getCorsModeDescription()}`);
       logger.info(`📖 API Docs available at /api-docs`);
     });
 

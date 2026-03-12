@@ -40,11 +40,13 @@ services:
         generateValue: true
       - key: LOG_LEVEL
         value: info
+      - key: ALLOWED_ORIGINS
+        value: "*"
       # --- Set these manually in the Render dashboard after deploy ---
       # FIREBASE_CONFIG     = paste full service account JSON as a single line
       # FIREBASE_PROJECT_ID = your Firebase project id
       # FIREBASE_DATABASE_URL = https://your-project.firebaseio.com
-      # ALLOWED_ORIGINS     = comma-separated URLs of your Flutter app (if hosted)
+      # ALLOWED_ORIGINS     = comma-separated URLs for web clients (use * to allow any origin)
 
 databases:
   - name: telemed-db

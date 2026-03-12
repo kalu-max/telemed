@@ -1,184 +1,118 @@
-# Telemedicine Platform - Complete Setup Guide
+# Telemedicine Quick Start (Both Apps)
 
-## Overview
-This project consists of:
-- **Backend**: Node.js/Express server (telemedicine_backend)
-- **Patient App**: Flutter application (telemedicine_app)
-- **Doctor App**: Flutter application (telemedicine_app/doctor_app)
+This guide is focused on production-style usage where users can install the apps and connect from anywhere.
 
-Both Flutter apps connect to the same backend via HTTP and WebSocket for seamless teleconsultation.
+## What You Get
 
----
+- One public backend for both apps
+- Patient app and doctor app using the same API and Socket.IO service
+- Optional local mode for development
 
-## Setup Instructions
+## Option A: Hosted Backend (Recommended)
 
-### 1. Start the Backend Server
+Use this mode for real users across different networks/locations.
 
-Open a terminal and navigate to the backend directory:
+### 1. Ensure backend is deployed
 
+Backend deployment config lives in:
+- `render.yaml`
+- `telemedicine_backend/server.js`
+
+Health endpoint should respond:
 ```bash
-cd telemedicine_backend
-npm install      # First time only
-npm start        # Starts server on http://localhost:3000
+curl https://telemed-backend.onrender.com/health
 ```
 
-The backend will be listening on `http://localhost:3000` by default. Check `.env` for port configuration.
+Expected JSON includes `status: "OK"`.
 
----
-
-### 2. Run the Patient App
-
-Open a new terminal:
+### 2. Run patient app
 
 ```bash
 cd telemedicine_app
 flutter pub get
-flutter run -d chrome   # Opens in browser; use -d edge, or emulator/device
+flutter run
 ```
 
-**Alternative**: Build as web:
-```bash
-flutter build web
-# Serve the build/web folder with any web server
-```
-
----
-
-### 3. Run the Doctor App
-
-Open another terminal:
+### 3. Run doctor app
 
 ```bash
 cd telemedicine_app/doctor_app
 flutter pub get
-flutter run -d chrome   # Opens in browser
+flutter run
 ```
 
----
+Both apps default to:
+- API: `https://telemed-backend.onrender.com`
+- WebSocket: `wss://telemed-backend.onrender.com`
 
-## Testing the System
+No localhost changes are required for production access.
 
-### Scenario 1: Two Browser Tabs (Patient + Doctor Web)
+## Option B: Local Development Backend (Optional)
 
-1. **Start backend**: `npm start` in `telemedicine_backend`
-2. **Tab 1 (Patient)**: Run patient app with `flutter run -d chrome`
-3. **Tab 2 (Doctor)**: Run doctor app with `flutter run -d chrome` (or second VS Code instance)
+Use this only when developing backend locally.
 
-### Scenario 2: Mobile + Browser
+### 1. Start backend
 
-1. **Start backend**: Same as above
-2. **Browser (Doctor)**: Run doctor app as web
-3. **Device/Emulator (Patient)**: Run patient app on Android/iOS device or emulator
-
-### Scenario 3: Two Mobile Devices
-
-1. **Start backend**: Same as above
-2. **Device 1 (Patient)**: Connect to backend IP, log in as patient
-3. **Device 2 (Doctor)**: Connect to backend IP, log in as doctor
-
----
-
-## Key Features
-
-### Patient App
-- User authentication (email/password)
-- View available doctors
-- Book/manage appointments
-- Initiate video consultations
-- Adaptive video quality (low bandwidth support)
-- View medical reports
-
-### Doctor App
-- Doctor authentication
-- Dashboard with appointments list
-- Accept/decline consultations
-- Video call with patients
-- View patient details & history
-- Manage schedule
-
-### Backend
-- RESTful API for user, appointment, and call management
-- WebSocket for real-time signaling
-- WebRTC video/audio conferencing
-- JWT authentication
-- Stateless, scalable architecture
-
----
-
-## Configuration
-
-### Backend (.env file)
-Create `telemedicine_backend/.env` with:
-```
-PORT=3000
-NODE_ENV=development
-JWT_SECRET=your_secret_key
-MONGODB_URI=mongodb://localhost:27017/telemedicine
-TURN_URLS=your_turn_server_url
-```
-
-### Flutter Apps
-API endpoint is configured in the code (default: `http://localhost:3000`)
-
----
-
-## Troubleshooting
-
-### "Connection refused" error
-- Ensure backend is running: `npm start` in `telemedicine_backend`
-- Check that port 3000 is not in use
-
-### CORS errors
-- Backend has CORS enabled by default
-- Check `server.js` for CORS configuration
-
-### Video not working
-- Ensure cameras/microphones are permitted
-- Check console for WebRTC errors
-- Verify STUN/TURN server configuration
-
-### Flutter build issues
 ```bash
-flutter clean
+cd telemedicine_backend
+npm install
+npm run dev
+```
+
+### 2. Run patient app with local override
+
+```bash
+cd telemedicine_app
 flutter pub get
-flutter run -d chrome
+flutter run --dart-define=API_BASE_URL=http://localhost:5000 --dart-define=WS_BASE_URL=ws://localhost:5000
 ```
 
----
+### 3. Run doctor app with local override
 
-## Project Structure
-
-```
-telemedicine_backend/
-├── server.js          # Main server entry
-├── server/
-│   ├── api/           # REST endpoints
-│   ├── middleware/    # Auth, error handling
-│   ├── websocket/     # WebRTC signaling
-│   └── utils/         # Helpers, logging
-└── public/
-    └── doctor-portal.html  # Legacy web UI (optional)
-
-telemedicine_app/
-├── lib/
-│   ├── main.dart      # Patient app entry
-│   ├── paitent/       # Patient screens
-│   └── services/      # API, WebRTC
-└── doctor_app/        # Doctor app (separate)
-    ├── lib/
-    │   └── main.dart  # Doctor app entry
-    └── pubspec.yaml
+```bash
+cd telemedicine_app/doctor_app
+flutter pub get
+flutter run --dart-define=API_BASE_URL=http://localhost:5000 --dart-define=WS_BASE_URL=ws://localhost:5000
 ```
 
----
+## Release Build Commands
 
-## Next Steps
+If you use a custom public domain, inject it at build time.
 
-1. **Backend**: Configure database (MongoDB), TURN servers, HTTPS/TLS
-2. **Patient App**: Implement report uploading, appointment history filtering
-3. **Doctor App**: Add schedule management, patient history view
-4. **Both**: Implement offline mode, push notifications, call history
+Patient app:
+```bash
+cd telemedicine_app
+flutter build apk --release --dart-define=API_BASE_URL=https://your-api-domain.com --dart-define=WS_BASE_URL=wss://your-api-domain.com
+```
 
----
+Doctor app:
+```bash
+cd telemedicine_app/doctor_app
+flutter build apk --release --dart-define=API_BASE_URL=https://your-api-domain.com --dart-define=WS_BASE_URL=wss://your-api-domain.com
+```
 
-For detailed API documentation, see `INTEGRATION_GUIDE.md` and `SYSTEM_ARCHITECTURE.md` in the root.
+## Deployment Automation (GitHub -> Render)
+
+The CI workflow now contains a deploy stage for backend:
+- File: `.github/workflows/ci.yml`
+- Trigger: push to `main`
+
+Required setup:
+1. Connect Render service to this GitHub repository.
+2. Keep `autoDeploy: true` in `render.yaml`.
+
+After that, each push to `main` runs tests, Render deploys automatically, and CI verifies the public health endpoint.
+
+## Common Problems
+
+1. App still calling old/local server
+- Doctor app may have an overridden URL saved in settings.
+- Reset server URL in app settings to your public backend.
+
+2. Browser CORS errors
+- Set `ALLOWED_ORIGINS` correctly in backend environment.
+- Use `*` only if you intentionally want open browser access.
+
+3. Slow first response on free hosting
+- Render free tier can cold start.
+- Upgrade plan if you need always-on low-latency behavior.

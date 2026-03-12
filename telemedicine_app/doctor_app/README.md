@@ -1,8 +1,8 @@
-// This README describes the doctor app structure and how to run it.
-
 # Doctor Telemedicine App
 
-> **Note:** The doctor app is now fully integrated with the backend (http://localhost:3000). Mock data has been removed and all appointments are fetched from the server using the built-in `TeleMedicineApiClient`.
+> **Note:** The doctor app is integrated with the hosted backend (`https://telemed-backend.onrender.com`) by default. Mock data has been removed and appointments are fetched from the server using the built-in `TeleMedicineApiClient`.
+
+> If the app still points to a local server, reset the server URL in Settings.
 
 
 This Flutter app is for doctors to manage teleconsultations, appointments, and video calls. It connects to the same backend as the patient app.
