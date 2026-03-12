@@ -5,7 +5,7 @@ services:
     region: oregon
     plan: free
     rootDir: telemedicine_backend
-    buildCommand: npm install
+    buildCommand: npm ci --omit=dev --no-audit --no-fund
     startCommand: node server.js
     healthCheckPath: /health
     autoDeploy: true
