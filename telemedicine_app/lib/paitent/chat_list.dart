@@ -43,42 +43,56 @@ class _ChatListScreenState extends State<ChatListScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _chats.isEmpty
-              ? const Center(child: Text('No chats yet'))
-              : ListView.builder(
-                  itemCount: _chats.length,
-                  itemBuilder: (context, index) {
-                    final c = _chats[index];
-                    final chatId = c['chatId'] ?? c['id'] ?? '';
-                    final participants = (c['participants'] as List?)?.cast<String>() ?? [];
-                    final nameMap = (c['participantNames'] as Map?)?.cast<String, dynamic>() ?? {};
-                    final otherIds = participants.where((p) => p != widget.api.currentUserId).toList();
-                    final otherNames = otherIds.map((id) {
+          ? const Center(child: Text('No chats yet'))
+          : ListView.builder(
+              itemCount: _chats.length,
+              itemBuilder: (context, index) {
+                final c = _chats[index];
+                final chatId = c['chatId'] ?? c['id'] ?? '';
+                final participants =
+                    (c['participants'] as List?)?.cast<String>() ?? [];
+                final nameMap =
+                    (c['participantNames'] as Map?)?.cast<String, dynamic>() ??
+                    {};
+                final otherIds = participants
+                    .where((p) => p != widget.api.currentUserId)
+                    .toList();
+                final otherNames = otherIds
+                    .map((id) {
                       final n = nameMap[id]?.toString() ?? '';
                       return n.isNotEmpty && n != id ? n : 'User';
-                    }).join(', ');
-                    final msgs = c['messages'] as List?;
-                    String lastMsg = (msgs?.isNotEmpty == true) ? (msgs!.last['text'] ?? '').toString() : '';
-                    if (lastMsg.isNotEmpty) {
-                      try {
-                        lastMsg = ChatEncryptionService.fromSharedSecret(chatId.toString()).decrypt(lastMsg);
-                      } catch (_) {
-                        // Message may already be plaintext.
-                      }
-                    }
-                    return ListTile(
-                      title: Text(otherNames.isNotEmpty ? otherNames : 'Conversation'),
-                      subtitle: Text(lastMsg),
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => ChatScreen(api: widget.api, chatId: chatId),
-                          ),
-                        );
-                      },
+                    })
+                    .join(', ');
+                final msgs = c['messages'] as List?;
+                String lastMsg = (msgs?.isNotEmpty == true)
+                    ? (msgs!.last['text'] ?? '').toString()
+                    : '';
+                if (lastMsg.isNotEmpty) {
+                  try {
+                    lastMsg = ChatEncryptionService.fromSharedSecret(
+                      chatId.toString(),
+                    ).decrypt(lastMsg);
+                  } catch (_) {
+                    // Message may already be plaintext.
+                  }
+                }
+                return ListTile(
+                  title: Text(
+                    otherNames.isNotEmpty ? otherNames : 'Conversation',
+                  ),
+                  subtitle: Text(lastMsg),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            ChatScreen(api: widget.api, chatId: chatId),
+                      ),
                     );
                   },
-                ),
+                );
+              },
+            ),
     );
   }
 }

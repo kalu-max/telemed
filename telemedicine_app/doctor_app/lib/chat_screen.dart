@@ -46,11 +46,13 @@ class _ChatScreenState extends State<ChatScreen> {
   void _connectSocket() {
     try {
       final baseUrl = widget.api.baseUrl.replaceFirst(RegExp(r'/api/?$'), '');
-      _socket = io.io(baseUrl, io.OptionBuilder()
-          .setTransports(['websocket'])
-          .setQuery({'userId': _myId, 'role': 'doctor'})
-          .enableAutoConnect()
-          .build());
+      _socket = io.io(
+          baseUrl,
+          io.OptionBuilder()
+              .setTransports(['websocket'])
+              .setQuery({'userId': _myId, 'role': 'doctor'})
+              .enableAutoConnect()
+              .build());
 
       _socket!.on('newMessage', (data) {
         if (!mounted) return;
@@ -72,7 +74,9 @@ class _ChatScreenState extends State<ChatScreen> {
 
       _socket!.on('typing', (data) {
         if (!mounted) return;
-        if (data is Map && data['chatId'] == widget.chatId && data['userId'] != _myId) {
+        if (data is Map &&
+            data['chatId'] == widget.chatId &&
+            data['userId'] != _myId) {
           setState(() => _otherTyping = true);
           _typingDebounce?.cancel();
           _typingDebounce = Timer(const Duration(seconds: 3), () {
@@ -149,21 +153,24 @@ class _ChatScreenState extends State<ChatScreen> {
     final resp = await widget.api.sendChatMessage(widget.chatId, encrypted);
     if (!mounted) return;
     if (!resp.success) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(resp.error?.toString() ?? 'Send failed')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(resp.error?.toString() ?? 'Send failed')));
     }
   }
 
   Future<void> _pickAndSendImage() async {
     try {
       final picker = ImagePicker();
-      final picked = await picker.pickImage(source: ImageSource.gallery, maxWidth: 1200, imageQuality: 75);
+      final picked = await picker.pickImage(
+          source: ImageSource.gallery, maxWidth: 1200, imageQuality: 75);
       if (picked == null || !mounted) return;
       final resp = await widget.api.sendChatMedia(widget.chatId, picked.path);
       if (!mounted) return;
       if (resp.success) {
         _loadMessages();
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(resp.error?.toString() ?? 'Upload failed')));
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(resp.error?.toString() ?? 'Upload failed')));
       }
     } catch (_) {}
   }
@@ -180,31 +187,45 @@ class _ChatScreenState extends State<ChatScreen> {
                 ? const Center(child: CircularProgressIndicator())
                 : ListView.builder(
                     controller: _scrollController,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     itemCount: _messages.length,
                     itemBuilder: (context, index) {
                       final m = _messages[index];
                       final isMe = m['senderId'] == _myId;
                       final isImage = m['messageType'] == 'image';
                       return Align(
-                        alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+                        alignment:
+                            isMe ? Alignment.centerRight : Alignment.centerLeft,
                         child: Container(
                           margin: const EdgeInsets.symmetric(vertical: 3),
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-                          constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 9),
+                          constraints: BoxConstraints(
+                              maxWidth:
+                                  MediaQuery.of(context).size.width * 0.75),
                           decoration: BoxDecoration(
-                            color: isMe ? theme.colorScheme.primary : theme.colorScheme.surfaceContainerHighest,
+                            color: isMe
+                                ? theme.colorScheme.primary
+                                : theme.colorScheme.surfaceContainerHighest,
                             borderRadius: BorderRadius.circular(16),
                           ),
                           child: isImage && m['imageUrl'] != null
                               ? ClipRRect(
                                   borderRadius: BorderRadius.circular(8),
-                                  child: Image.network('${widget.api.baseUrl}${m['imageUrl']}', width: 200, fit: BoxFit.cover,
-                                    errorBuilder: (_, e, s) => const Icon(Icons.broken_image)),
+                                  child: Image.network(
+                                      '${widget.api.baseUrl}${m['imageUrl']}',
+                                      width: 200,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, e, s) =>
+                                          const Icon(Icons.broken_image)),
                                 )
                               : Text(
                                   m['text'] ?? '',
-                                  style: TextStyle(color: isMe ? Colors.white : theme.colorScheme.onSurface),
+                                  style: TextStyle(
+                                      color: isMe
+                                          ? Colors.white
+                                          : theme.colorScheme.onSurface),
                                 ),
                         ),
                       );
@@ -214,20 +235,27 @@ class _ChatScreenState extends State<ChatScreen> {
           if (_otherTyping)
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-              child: Align(alignment: Alignment.centerLeft, child: Text('typing...', style: TextStyle(fontSize: 12, color: Colors.grey))),
+              child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('typing...',
+                      style: TextStyle(fontSize: 12, color: Colors.grey))),
             ),
           Padding(
             padding: const EdgeInsets.all(8.0),
             child: Row(
               children: [
-                IconButton(onPressed: _pickAndSendImage, icon: const Icon(Icons.attach_file)),
+                IconButton(
+                    onPressed: _pickAndSendImage,
+                    icon: const Icon(Icons.attach_file)),
                 Expanded(
                   child: TextField(
                     controller: _controller,
                     decoration: InputDecoration(
                       hintText: 'Type a message',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(24)),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(24)),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 10),
                     ),
                     onChanged: (_) => _emitTyping(),
                     onSubmitted: (_) => _send(),

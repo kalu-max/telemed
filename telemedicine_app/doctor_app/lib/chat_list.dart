@@ -49,30 +49,41 @@ class _ChatListScreenState extends State<ChatListScreen> {
                   itemBuilder: (context, index) {
                     final c = _chats[index];
                     final chatId = c['chatId'] ?? c['id'] ?? '';
-                    final participants = (c['participants'] as List?)?.cast<String>() ?? [];
-                    final nameMap = (c['participantNames'] as Map?)?.cast<String, dynamic>() ?? {};
-                    final otherIds = participants.where((p) => p != widget.api.currentUserId).toList();
+                    final participants =
+                        (c['participants'] as List?)?.cast<String>() ?? [];
+                    final nameMap = (c['participantNames'] as Map?)
+                            ?.cast<String, dynamic>() ??
+                        {};
+                    final otherIds = participants
+                        .where((p) => p != widget.api.currentUserId)
+                        .toList();
                     final otherNames = otherIds.map((id) {
                       final n = nameMap[id]?.toString() ?? '';
                       return n.isNotEmpty && n != id ? n : 'Patient';
                     }).join(', ');
                     final msgs = c['messages'] as List?;
-                    String lastMsg = (msgs?.isNotEmpty == true) ? (msgs!.last['text'] ?? '').toString() : '';
+                    String lastMsg = (msgs?.isNotEmpty == true)
+                        ? (msgs!.last['text'] ?? '').toString()
+                        : '';
                     if (lastMsg.isNotEmpty) {
                       try {
-                        lastMsg = ChatEncryptionService.fromSharedSecret(chatId.toString()).decrypt(lastMsg);
+                        lastMsg = ChatEncryptionService.fromSharedSecret(
+                                chatId.toString())
+                            .decrypt(lastMsg);
                       } catch (_) {
                         // Message may already be plaintext.
                       }
                     }
                     return ListTile(
-                      title: Text(otherNames.isNotEmpty ? otherNames : 'Conversation'),
+                      title: Text(
+                          otherNames.isNotEmpty ? otherNames : 'Conversation'),
                       subtitle: Text(lastMsg),
                       onTap: () {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => ChatScreen(api: widget.api, chatId: chatId),
+                            builder: (context) =>
+                                ChatScreen(api: widget.api, chatId: chatId),
                           ),
                         );
                       },

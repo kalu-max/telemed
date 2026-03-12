@@ -25,7 +25,8 @@ class ConsultationWaitingScreen extends StatefulWidget {
   });
 
   @override
-  State<ConsultationWaitingScreen> createState() => _ConsultationWaitingScreenState();
+  State<ConsultationWaitingScreen> createState() =>
+      _ConsultationWaitingScreenState();
 }
 
 class _ConsultationWaitingScreenState extends State<ConsultationWaitingScreen>
@@ -56,14 +57,19 @@ class _ConsultationWaitingScreenState extends State<ConsultationWaitingScreen>
     try {
       final baseUrl = widget.api.baseUrl.replaceFirst(RegExp(r'/api/?$'), '');
       final myId = widget.api.currentUserId ?? '';
-      _socket = io.io(baseUrl, io.OptionBuilder()
-          .setTransports(['websocket'])
-          .setQuery({'userId': myId, 'role': 'patient'})
-          .enableAutoConnect()
-          .build());
+      _socket = io.io(
+        baseUrl,
+        io.OptionBuilder()
+            .setTransports(['websocket'])
+            .setQuery({'userId': myId, 'role': 'patient'})
+            .enableAutoConnect()
+            .build(),
+      );
       _socket!.on('appointmentAccepted', (data) {
         if (!mounted || _doctorConnected || _cancelled) return;
-        final apptId = data is Map ? (data['appointmentId']?.toString() ?? '') : '';
+        final apptId = data is Map
+            ? (data['appointmentId']?.toString() ?? '')
+            : '';
         if (apptId == widget.appointmentId) {
           _onDoctorConnected();
         }
@@ -97,7 +103,8 @@ class _ConsultationWaitingScreenState extends State<ConsultationWaitingScreen>
     if (!mounted || _doctorConnected || _cancelled) return;
     if (resp.success && resp.data != null) {
       for (final appt in resp.data!) {
-        final id = appt['appointmentId']?.toString() ?? appt['id']?.toString() ?? '';
+        final id =
+            appt['appointmentId']?.toString() ?? appt['id']?.toString() ?? '';
         if (id == widget.appointmentId) {
           final status = appt['status']?.toString() ?? '';
           if (status == 'connected' || status == 'in-progress') {
@@ -209,7 +216,11 @@ class _ConsultationWaitingScreenState extends State<ConsultationWaitingScreen>
                             ),
                           ],
                         ),
-                        child: const Icon(Icons.videocam, size: 48, color: Colors.white),
+                        child: const Icon(
+                          Icons.videocam,
+                          size: 48,
+                          color: Colors.white,
+                        ),
                       ),
                     );
                   },
@@ -222,12 +233,18 @@ class _ConsultationWaitingScreenState extends State<ConsultationWaitingScreen>
                 const SizedBox(height: 4),
                 Text(
                   widget.doctorName,
-                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                  ),
                   textAlign: TextAlign.center,
                 ),
                 Text(
                   widget.specialty,
-                  style: TextStyle(color: Colors.teal[700], fontWeight: FontWeight.w500),
+                  style: TextStyle(
+                    color: Colors.teal[700],
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
                 const SizedBox(height: 40),
                 // Countdown ring
@@ -251,12 +268,17 @@ class _ConsultationWaitingScreenState extends State<ConsultationWaitingScreen>
                             style: TextStyle(
                               fontSize: 42,
                               fontWeight: FontWeight.bold,
-                              color: isUrgent ? Colors.orange : Colors.teal[700],
+                              color: isUrgent
+                                  ? Colors.orange
+                                  : Colors.teal[700],
                             ),
                           ),
                           Text(
                             'seconds',
-                            style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                            style: TextStyle(
+                              color: Colors.grey[500],
+                              fontSize: 12,
+                            ),
                           ),
                         ],
                       ),
@@ -265,7 +287,10 @@ class _ConsultationWaitingScreenState extends State<ConsultationWaitingScreen>
                 ),
                 const SizedBox(height: 32),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 12,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.blue[50],
                     borderRadius: BorderRadius.circular(12),
@@ -273,12 +298,19 @@ class _ConsultationWaitingScreenState extends State<ConsultationWaitingScreen>
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.info_outline, color: Colors.blue[700], size: 18),
+                      Icon(
+                        Icons.info_outline,
+                        color: Colors.blue[700],
+                        size: 18,
+                      ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
                           'The doctor has been notified and will join shortly.',
-                          style: TextStyle(color: Colors.blue[800], fontSize: 13),
+                          style: TextStyle(
+                            color: Colors.blue[800],
+                            fontSize: 13,
+                          ),
                         ),
                       ),
                     ],
@@ -287,8 +319,10 @@ class _ConsultationWaitingScreenState extends State<ConsultationWaitingScreen>
                 const Spacer(),
                 TextButton.icon(
                   icon: const Icon(Icons.cancel_outlined, color: Colors.red),
-                  label: const Text('Cancel Consultation',
-                      style: TextStyle(color: Colors.red)),
+                  label: const Text(
+                    'Cancel Consultation',
+                    style: TextStyle(color: Colors.red),
+                  ),
                   onPressed: _cancelConsultation,
                 ),
                 const SizedBox(height: 16),
