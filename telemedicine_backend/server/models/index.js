@@ -2,6 +2,11 @@ const { DataTypes } = require('sequelize');
 const { sequelize } = require('../config/database');
 const { addEncryptionHooks } = require('../utils/encryption');
 
+const isPostgresDialect = sequelize.getDialect() === 'postgres';
+const consultationRefKey = isPostgresDialect ? 'consultation_id' : 'consultationId';
+const chatRefKey = isPostgresDialect ? 'chat_id' : 'chatId';
+const mediaFileRefKey = isPostgresDialect ? 'file_id' : 'fileId';
+
 // User model
 const User = sequelize.define('User', {
   userId: {
@@ -118,7 +123,9 @@ const Consultation = sequelize.define('Consultation', {
     type: DataTypes.STRING,
     field: 'doctor_id',
     references: {
-      model: Doctor,
+      // Use users.user_id for FK integrity across legacy doctor schemas
+      // where doctors.user_id may not be constrained as UNIQUE.
+      model: User,
       key: 'user_id'
     }
   },
@@ -214,22 +221,22 @@ const Message = sequelize.define('Message', {
     type: DataTypes.STRING,
     references: {
       model: Consultation,
-      key: 'consultationId'
+      key: consultationRefKey
     }
   },
   senderId: {
     type: DataTypes.STRING,
     references: {
       model: User,
-      key: 'userId'
+      key: 'user_id'
     }
   },
   content: DataTypes.TEXT,
   mediaId: {
     type: DataTypes.STRING,
     references: {
-      model: 'MediaFiles',
-      key: 'fileId'
+      model: 'media_files',
+      key: mediaFileRefKey
     }
   },
   timestamp: {
@@ -250,7 +257,7 @@ const CallLog = sequelize.define('CallLog', {
     type: DataTypes.STRING,
     references: {
       model: Consultation,
-      key: 'consultationId'
+      key: consultationRefKey
     }
   },
   startTime: DataTypes.DATE,
@@ -287,21 +294,21 @@ const Billing = sequelize.define('Billing', {
     type: DataTypes.STRING,
     references: {
       model: User,
-      key: 'userId'
+      key: 'user_id'
     }
   },
   doctorId: {
     type: DataTypes.STRING,
     references: {
       model: User,
-      key: 'userId'
+      key: 'user_id'
     }
   },
   consultId: {
     type: DataTypes.STRING,
     references: {
       model: Consultation,
-      key: 'consultationId'
+      key: consultationRefKey
     }
   },
   amount: DataTypes.DECIMAL(10, 2),
@@ -339,7 +346,7 @@ const ChatMessage = sequelize.define('ChatMessage', {
   },
   chatId: {
     type: DataTypes.STRING,
-    references: { model: Chat, key: 'chatId' }
+    references: { model: Chat, key: chatRefKey }
   },
   senderId: DataTypes.STRING,
   text: DataTypes.TEXT,
@@ -422,7 +429,7 @@ const DoctorAvailabilitySlot = sequelize.define('DoctorAvailabilitySlot', {
     type: DataTypes.STRING,
     field: 'doctor_id',
     references: {
-      model: Doctor,
+      model: User,
       key: 'user_id'
     }
   },
@@ -509,24 +516,32 @@ const AuditLog = sequelize.define('AuditLog', {
   tableName: 'audit_logs',
   indexes: [
     { fields: ['user_id'] },
-    { fields: ['resourceType'] },
-    { fields: ['createdAt'] }
+    { fields: [isPostgresDialect ? 'resource_type' : 'resourceType'] },
+    { fields: [isPostgresDialect ? 'created_at' : 'createdAt'] }
   ]
 });
 
 // Associations
-User.hasOne(Doctor, { foreignKey: 'user_id' });
-User.hasOne(Patient, { foreignKey: 'user_id' });
-Doctor.belongsTo(User, { foreignKey: 'user_id' });
-Patient.belongsTo(User, { foreignKey: 'user_id' });
+User.hasOne(Doctor, { foreignKey: 'userId', sourceKey: 'userId' });
+User.hasOne(Patient, { foreignKey: 'userId', sourceKey: 'userId' });
+Doctor.belongsTo(User, { foreignKey: 'userId', targetKey: 'userId' });
+Patient.belongsTo(User, { foreignKey: 'userId', targetKey: 'userId' });
 
-Consultation.belongsTo(User, { foreignKey: 'patient_id', targetKey: 'userId', as: 'patient' });
-Consultation.belongsTo(Doctor, { foreignKey: 'doctor_id', targetKey: 'userId' });
+Consultation.belongsTo(User, { foreignKey: 'patientId', targetKey: 'userId', as: 'patient' });
+Consultation.belongsTo(User, { foreignKey: 'doctorId', targetKey: 'userId', as: 'doctorUser' });
+// Keep an object-level relation to Doctor for convenience, but avoid DB-level
+// FK creation because some legacy schemas do not enforce doctors.user_id unique.
+Consultation.belongsTo(Doctor, {
+  foreignKey: 'doctorId',
+  targetKey: 'userId',
+  as: 'doctor',
+  constraints: false,
+});
 
-MedicalRecord.belongsTo(User, { targetKey: 'userId' });
-MedicalRecord.belongsTo(Consultation, { foreignKey: 'consultationId' });
+MedicalRecord.belongsTo(User, { foreignKey: 'patientId', targetKey: 'userId', as: 'patient' });
+MedicalRecord.belongsTo(Consultation, { foreignKey: 'consultationId', targetKey: 'consultationId' });
 
-Notification.belongsTo(User, { foreignKey: 'userId' });
+Notification.belongsTo(User, { foreignKey: 'userId', targetKey: 'userId' });
 
 Chat.hasMany(ChatMessage, { foreignKey: 'chatId' });
 ChatMessage.belongsTo(Chat, { foreignKey: 'chatId' });
@@ -546,12 +561,20 @@ Billing.belongsTo(Consultation, { foreignKey: 'consultId' });
 User.hasMany(Billing, { foreignKey: 'patientId', as: 'patientBills' });
 User.hasMany(Billing, { foreignKey: 'doctorId', as: 'doctorBills' });
 
-Doctor.hasMany(DoctorAvailabilitySlot, { foreignKey: 'doctor_id' });
-DoctorAvailabilitySlot.belongsTo(Doctor, { foreignKey: 'doctor_id' });
+Doctor.hasMany(DoctorAvailabilitySlot, {
+  foreignKey: 'doctorId',
+  sourceKey: 'userId',
+  constraints: false,
+});
+DoctorAvailabilitySlot.belongsTo(Doctor, {
+  foreignKey: 'doctorId',
+  targetKey: 'userId',
+  constraints: false,
+});
 
 // DoctorReview associations — skip Doctor FK for SQLite compat (Doctor PK is also FK to Users)
 // Doctor.hasMany(DoctorReview) not used; query by doctorId column directly
-DoctorReview.belongsTo(User, { foreignKey: 'patient_id', targetKey: 'userId', as: 'reviewer' });
+DoctorReview.belongsTo(User, { foreignKey: 'patientId', targetKey: 'userId', as: 'reviewer' });
 
 module.exports = {
   User,

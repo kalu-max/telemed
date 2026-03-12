@@ -82,7 +82,12 @@ const syncDatabase = async (force = false) => {
     }
     logger.info('✅ Database synchronized');
   } catch (err) {
-    logger.error('❌ Database sync failed:', err.message, err.sql || '');
+    const parentMessage = err && err.parent && err.parent.message ? ` | ${err.parent.message}` : '';
+    const sqlState = err && err.parent && err.parent.code ? ` | SQLSTATE ${err.parent.code}` : '';
+    logger.error(`❌ Database sync failed: ${err.message || 'Unknown error'}${parentMessage}${sqlState}`);
+    if (err && err.sql) {
+      logger.error(`❌ Failed SQL: ${err.sql}`);
+    }
     // On SQLite, retry without alter as a fallback
     if (dialect === 'sqlite') {
       try {
@@ -90,8 +95,12 @@ const syncDatabase = async (force = false) => {
         logger.info('✅ Database re-created (force sync fallback)');
       } catch (err2) {
         logger.error('❌ Force sync also failed:', err2.message);
+        throw err2;
       }
+      return;
     }
+    // In production Postgres, fail fast so deploy logs clearly reflect schema issues.
+    throw err;
   }
 };
 
