@@ -14,6 +14,8 @@ services:
         value: production
       - key: DB_DIALECT
         value: postgres
+      - key: DB_SYNC_ALTER
+        value: "false"
       - key: DB_HOST
         fromDatabase:
           name: telemed-db

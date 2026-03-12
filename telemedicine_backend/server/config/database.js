@@ -3,6 +3,21 @@ const logger = require('../utils/logger');
 
 // Database connection setup (dialect adjustable for tests)
 const dialect = process.env.DB_DIALECT || 'sqlite';
+const isProduction = process.env.NODE_ENV === 'production';
+
+function parseBoolean(value) {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+  return null;
+}
+
+// Default behavior:
+// - production: skip expensive ALTER sync (use migrations)
+// - non-production: allow ALTER sync for faster local iteration
+const parsedSyncAlter = parseBoolean(process.env.DB_SYNC_ALTER);
+const shouldAlterSchema = parsedSyncAlter !== null ? parsedSyncAlter : !isProduction;
 
 const sequelizeOptions = {
   dialect,
@@ -52,7 +67,7 @@ const syncDatabase = async (force = false) => {
       // SQLite ALTER TABLE is limited — create missing tables, skip alter
       await sequelize.sync({ force: false });
     } else {
-      await sequelize.sync({ alter: true });
+      await sequelize.sync({ alter: shouldAlterSchema, force: false });
     }
     logger.info('✅ Database synchronized');
   } catch (err) {
