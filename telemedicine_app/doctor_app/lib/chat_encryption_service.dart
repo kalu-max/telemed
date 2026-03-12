@@ -28,10 +28,12 @@ class ChatEncryptionService {
     final plaintextBytes = Uint8List.fromList(utf8.encode(plaintext));
 
     final cipher = GCMBlockCipher(AESEngine())
-      ..init(true, AEADParameters(KeyParameter(_key), 128, nonce, Uint8List(0)));
+      ..init(
+          true, AEADParameters(KeyParameter(_key), 128, nonce, Uint8List(0)));
 
     final output = Uint8List(cipher.getOutputSize(plaintextBytes.length));
-    var offset = cipher.processBytes(plaintextBytes, 0, plaintextBytes.length, output, 0);
+    var offset = cipher.processBytes(
+        plaintextBytes, 0, plaintextBytes.length, output, 0);
     offset += cipher.doFinal(output, offset);
 
     final combined = Uint8List(_nonceLength + offset);
@@ -46,10 +48,12 @@ class ChatEncryptionService {
     final ciphertextAndTag = Uint8List.sublistView(combined, _nonceLength);
 
     final cipher = GCMBlockCipher(AESEngine())
-      ..init(false, AEADParameters(KeyParameter(_key), 128, nonce, Uint8List(0)));
+      ..init(
+          false, AEADParameters(KeyParameter(_key), 128, nonce, Uint8List(0)));
 
     final output = Uint8List(cipher.getOutputSize(ciphertextAndTag.length));
-    var offset = cipher.processBytes(ciphertextAndTag, 0, ciphertextAndTag.length, output, 0);
+    var offset = cipher.processBytes(
+        ciphertextAndTag, 0, ciphertextAndTag.length, output, 0);
     offset += cipher.doFinal(output, offset);
     return utf8.decode(output.sublist(0, offset));
   }
