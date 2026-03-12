@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'api_client.dart';
 import 'chat_screen.dart';
+import 'chat_encryption_service.dart';
 
 class ChatListScreen extends StatefulWidget {
   final TeleMedicineApiClient api;
@@ -56,10 +57,17 @@ class _ChatListScreenState extends State<ChatListScreen> {
                       return n.isNotEmpty && n != id ? n : 'Patient';
                     }).join(', ');
                     final msgs = c['messages'] as List?;
-                    final lastMsg = (msgs?.isNotEmpty == true) ? (msgs!.last['text'] ?? '') : '';
+                    String lastMsg = (msgs?.isNotEmpty == true) ? (msgs!.last['text'] ?? '').toString() : '';
+                    if (lastMsg.isNotEmpty) {
+                      try {
+                        lastMsg = ChatEncryptionService.fromSharedSecret(chatId.toString()).decrypt(lastMsg);
+                      } catch (_) {
+                        // Message may already be plaintext.
+                      }
+                    }
                     return ListTile(
                       title: Text(otherNames.isNotEmpty ? otherNames : 'Conversation'),
-                      subtitle: Text(lastMsg ?? ''),
+                      subtitle: Text(lastMsg),
                       onTap: () {
                         Navigator.push(
                           context,

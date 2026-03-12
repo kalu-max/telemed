@@ -64,7 +64,7 @@ class _ConsultationWaitingScreenState extends State<ConsultationWaitingScreen>
       _socket!.on('appointmentAccepted', (data) {
         if (!mounted || _doctorConnected || _cancelled) return;
         final apptId = data is Map ? (data['appointmentId']?.toString() ?? '') : '';
-        if (apptId == widget.appointmentId || apptId.isEmpty) {
+        if (apptId == widget.appointmentId) {
           _onDoctorConnected();
         }
       });

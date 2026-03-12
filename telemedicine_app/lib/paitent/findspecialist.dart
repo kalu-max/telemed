@@ -634,7 +634,20 @@ class _FindSpecialistScreenState extends State<FindSpecialistScreen> {
 
     final appointmentId =
         resp.data!['appointmentId']?.toString() ??
+        resp.data!['appointment_id']?.toString() ??
+        (resp.data!['appointment'] is Map ? resp.data!['appointment']['appointmentId']?.toString() : null) ??
+        (resp.data!['appointment'] is Map ? resp.data!['appointment']['consultationId']?.toString() : null) ??
         resp.data!['id']?.toString() ?? '';
+
+    if (appointmentId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Appointment created but no appointment ID was returned. Please try again.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
 
     if (!context.mounted) return;
     Navigator.push(
