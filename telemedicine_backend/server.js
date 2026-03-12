@@ -202,37 +202,55 @@ initializeCommunicationSocket(io);
 // Error handling middleware
 app.use(errorHandler);
 
-// Initialize databases and start server
+let reminderSchedulerStarted = false;
+
+function startReminderSchedulerSafely() {
+  if (reminderSchedulerStarted) return;
+  try {
+    const { startReminderScheduler } = require('./server/services/reminderScheduler');
+    const models = require('./server/models/index');
+    const { pushNotification } = require('./server/api/users');
+    startReminderScheduler(models, pushNotification || (() => {}));
+    reminderSchedulerStarted = true;
+  } catch (e) {
+    logger.warn(`Reminder scheduler not started: ${e.message}`);
+  }
+}
+
+async function syncDatabaseWithRetry() {
+  const retryMs = 30000;
+  while (true) {
+    try {
+      logger.info('🔄 Synchronizing PostgreSQL database...');
+      await syncDatabase();
+      logger.info('✅ PostgreSQL ready');
+      startReminderSchedulerSafely();
+      return;
+    } catch (error) {
+      logger.error(`❌ Database initialization failed, retrying in ${retryMs / 1000}s: ${error.message}`);
+      await new Promise((resolve) => setTimeout(resolve, retryMs));
+    }
+  }
+}
+
+// Initialize app: start HTTP server first (for health checks), then DB in background
 const initializeApp = async () => {
   try {
-    // Sync PostgreSQL database
-    logger.info('🔄 Synchronizing PostgreSQL database...');
-    await syncDatabase();
-    logger.info('✅ PostgreSQL ready');
-
-    // Verify Firebase (optional - if not initialized, warning already logged)
-    logger.info('✅ Firebase utilities loaded');
-
-    // Start server
     const PORT = process.env.PORT || 5000;
     server.listen(PORT, () => {
       logger.info(`🎥 Telemedicine Video Backend running on port ${PORT}`);
-      logger.info(`📊 PostgreSQL: ${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`);
+      logger.info(`📊 PostgreSQL: ${process.env.DB_HOST || 'via DATABASE_URL'}:${process.env.DB_PORT || ''}/${process.env.DB_NAME || ''}`);
       logger.info(`🔥 Firebase: ${process.env.FIREBASE_PROJECT_ID || 'Not configured'}`);
       logger.info(`📡 WebRTC Signaling Server active`);
       logger.info(`🔒 CORS mode: ${getCorsModeDescription()}`);
+      logger.info('✅ Firebase utilities loaded');
       logger.info(`📖 API Docs available at /api-docs`);
     });
 
-    // Start appointment reminder scheduler
-    try {
-      const { startReminderScheduler } = require('./server/services/reminderScheduler');
-      const models = require('./server/models/index');
-      const { pushNotification } = require('./server/api/users');
-      startReminderScheduler(models, pushNotification || (() => {}));
-    } catch (e) {
-      logger.warn(`Reminder scheduler not started: ${e.message}`);
-    }
+    // Do not block server startup on DB readiness (important for hosted health checks)
+    syncDatabaseWithRetry().catch((error) => {
+      logger.error(`❌ Background database sync crashed: ${error.message}`);
+    });
   } catch (error) {
     logger.error('❌ Failed to initialize application:', error.message);
     process.exit(1);
