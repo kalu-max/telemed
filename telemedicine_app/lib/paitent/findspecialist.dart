@@ -52,7 +52,9 @@ class _FindSpecialistScreenState extends State<FindSpecialistScreen> {
     });
     try {
       final service = context.read<DoctorService>();
-      final list = await service.fetchAvailableDoctors(specialization: specialization);
+      final list = await service.fetchAvailableDoctors(
+        specialization: specialization,
+      );
       if (!mounted) return;
       setState(() {
         _doctors = list;
@@ -106,19 +108,24 @@ class _FindSpecialistScreenState extends State<FindSpecialistScreen> {
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : _error != null
-                    ? Center(child: Text(_error!, style: const TextStyle(color: Colors.red)))
-                    : _doctors.isEmpty
-                        ? const Center(child: Text('No doctors found'))
-                        : ListView.builder(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12.0,
-                              vertical: 8.0,
-                            ),
-                            itemCount: _doctors.length,
-                            itemBuilder: (context, index) {
-                              return _buildDoctorCard(context, _doctors[index]);
-                            },
-                          ),
+                ? Center(
+                    child: Text(
+                      _error!,
+                      style: const TextStyle(color: Colors.red),
+                    ),
+                  )
+                : _doctors.isEmpty
+                ? const Center(child: Text('No doctors found'))
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12.0,
+                      vertical: 8.0,
+                    ),
+                    itemCount: _doctors.length,
+                    itemBuilder: (context, index) {
+                      return _buildDoctorCard(context, _doctors[index]);
+                    },
+                  ),
           ),
         ],
       ),
@@ -134,7 +141,11 @@ class _FindSpecialistScreenState extends State<FindSpecialistScreen> {
           if (query.length >= 2) {
             _searchDoctors(query);
           } else if (query.isEmpty) {
-            _loadDoctors(specialization: _selectedCategoryIndex == 0 ? null : _categories[_selectedCategoryIndex]);
+            _loadDoctors(
+              specialization: _selectedCategoryIndex == 0
+                  ? null
+                  : _categories[_selectedCategoryIndex],
+            );
           }
         },
         decoration: InputDecoration(
@@ -173,10 +184,14 @@ class _FindSpecialistScreenState extends State<FindSpecialistScreen> {
             rating: (map['rating'] ?? 0).toDouble(),
             bio: map['bio'] ?? '',
             yearsOfExperience: map['yearsOfExperience'],
-            consultationFee: map['consultationFee'] != null ? (map['consultationFee'] as num).toDouble() : null,
+            consultationFee: map['consultationFee'] != null
+                ? (map['consultationFee'] as num).toDouble()
+                : null,
           );
         }).toList();
-        setState(() { _doctors = searchedDoctors; });
+        setState(() {
+          _doctors = searchedDoctors;
+        });
       }
     } catch (_) {}
   }
@@ -225,7 +240,9 @@ class _FindSpecialistScreenState extends State<FindSpecialistScreen> {
   }
 
   Widget _buildDoctorCard(BuildContext context, DoctorProfile doctor) {
-    final specialty = doctor.specialties.isNotEmpty ? doctor.specialties.first : 'General';
+    final specialty = doctor.specialties.isNotEmpty
+        ? doctor.specialties.first
+        : 'General';
     return Container(
       margin: const EdgeInsets.only(bottom: 12.0),
       padding: const EdgeInsets.all(12.0),
@@ -311,10 +328,7 @@ class _FindSpecialistScreenState extends State<FindSpecialistScreen> {
                         doctor.bio,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: Colors.grey[700],
-                          fontSize: 12,
-                        ),
+                        style: TextStyle(color: Colors.grey[700], fontSize: 12),
                       ),
                     ],
                     if (doctor.consultationFee != null) ...[
@@ -332,20 +346,15 @@ class _FindSpecialistScreenState extends State<FindSpecialistScreen> {
                       const SizedBox(height: 4),
                       Text(
                         '${doctor.yearsOfExperience} years experience',
-                        style: TextStyle(
-                          color: Colors.grey[600],
-                          fontSize: 12,
-                        ),
+                        style: TextStyle(color: Colors.grey[600], fontSize: 12),
                       ),
                     ],
-                    if (doctor.qualification != null && doctor.qualification!.isNotEmpty) ...[
+                    if (doctor.qualification != null &&
+                        doctor.qualification!.isNotEmpty) ...[
                       const SizedBox(height: 4),
                       Text(
                         doctor.qualification!,
-                        style: TextStyle(
-                          color: Colors.grey[600],
-                          fontSize: 12,
-                        ),
+                        style: TextStyle(color: Colors.grey[600], fontSize: 12),
                       ),
                     ],
                   ],
@@ -377,12 +386,12 @@ class _FindSpecialistScreenState extends State<FindSpecialistScreen> {
                 },
                 icon: const Icon(Icons.star, size: 16, color: Colors.amber),
                 label: const Text('Reviews', style: TextStyle(fontSize: 12)),
-                style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8)),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
               ),
               const Spacer(),
-              Expanded(
-                child: _buildActionButton(context, doctor),
-              ),
+              Expanded(child: _buildActionButton(context, doctor)),
             ],
           ),
         ],
@@ -392,7 +401,9 @@ class _FindSpecialistScreenState extends State<FindSpecialistScreen> {
 
   // --- Book appointment then navigate to 60-second waiting screen ---
   void _showConsentAndJoin(BuildContext context, DoctorProfile doctor) {
-    final specialty = doctor.specialties.isNotEmpty ? doctor.specialties.first : '';
+    final specialty = doctor.specialties.isNotEmpty
+        ? doctor.specialties.first
+        : '';
     showDialog(
       context: context,
       builder: (BuildContext dialogContext) {
@@ -411,7 +422,10 @@ class _FindSpecialistScreenState extends State<FindSpecialistScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Decline', style: TextStyle(color: Colors.grey)),
+              child: const Text(
+                'Decline',
+                style: TextStyle(color: Colors.grey),
+              ),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
@@ -424,7 +438,10 @@ class _FindSpecialistScreenState extends State<FindSpecialistScreen> {
                 Navigator.pop(dialogContext);
                 _showSlotPicker(context, doctor, specialty);
               },
-              child: const Text('Consent & Continue', style: TextStyle(color: Colors.white)),
+              child: const Text(
+                'Consent & Continue',
+                style: TextStyle(color: Colors.white),
+              ),
             ),
           ],
         );
@@ -432,7 +449,11 @@ class _FindSpecialistScreenState extends State<FindSpecialistScreen> {
     );
   }
 
-  Future<void> _showSlotPicker(BuildContext context, DoctorProfile doctor, String specialty) async {
+  Future<void> _showSlotPicker(
+    BuildContext context,
+    DoctorProfile doctor,
+    String specialty,
+  ) async {
     final service = context.read<DoctorService>();
     final TeleMedicineApiClient api = service.api;
     DateTime selectedDate = DateTime.now();
@@ -451,15 +472,30 @@ class _FindSpecialistScreenState extends State<FindSpecialistScreen> {
         return StatefulBuilder(
           builder: (ctx, setSheetState) {
             Future<void> loadSlots() async {
-              setSheetState(() { loadingSlots = true; selectedTime = null; });
-              final dateStr = '${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}';
+              setSheetState(() {
+                loadingSlots = true;
+                selectedTime = null;
+              });
+              final dateStr =
+                  '${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}';
               final resp = await api.getDoctorTimeSlots(doctor.id, dateStr);
               if (!ctx.mounted) return;
               if (resp.success && resp.data != null) {
-                final slots = (resp.data!['slots'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-                setSheetState(() { availableSlots = slots; loadingSlots = false; slotsLoaded = true; });
+                final slots =
+                    (resp.data!['slots'] as List?)
+                        ?.cast<Map<String, dynamic>>() ??
+                    [];
+                setSheetState(() {
+                  availableSlots = slots;
+                  loadingSlots = false;
+                  slotsLoaded = true;
+                });
               } else {
-                setSheetState(() { availableSlots = []; loadingSlots = false; slotsLoaded = true; });
+                setSheetState(() {
+                  availableSlots = [];
+                  loadingSlots = false;
+                  slotsLoaded = true;
+                });
               }
             }
 
@@ -471,7 +507,9 @@ class _FindSpecialistScreenState extends State<FindSpecialistScreen> {
             return Padding(
               padding: EdgeInsets.only(
                 bottom: MediaQuery.of(ctx).viewInsets.bottom,
-                left: 16, right: 16, top: 16,
+                left: 16,
+                right: 16,
+                top: 16,
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -479,21 +517,38 @@ class _FindSpecialistScreenState extends State<FindSpecialistScreen> {
                 children: [
                   Center(
                     child: Container(
-                      width: 40, height: 4,
-                      decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[300],
+                        borderRadius: BorderRadius.circular(2),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 16),
-                  Text('Book with ${doctor.name}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text(
+                    'Book with ${doctor.name}',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                   const SizedBox(height: 16),
                   // Date picker
                   Row(
                     children: [
-                      const Icon(Icons.calendar_today, size: 18, color: Colors.teal),
+                      const Icon(
+                        Icons.calendar_today,
+                        size: 18,
+                        color: Colors.teal,
+                      ),
                       const SizedBox(width: 8),
                       Text(
                         '${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                       const Spacer(),
                       TextButton(
@@ -502,7 +557,9 @@ class _FindSpecialistScreenState extends State<FindSpecialistScreen> {
                             context: ctx,
                             initialDate: selectedDate,
                             firstDate: DateTime.now(),
-                            lastDate: DateTime.now().add(const Duration(days: 30)),
+                            lastDate: DateTime.now().add(
+                              const Duration(days: 30),
+                            ),
                           );
                           if (picked != null) {
                             selectedDate = picked;
@@ -514,21 +571,42 @@ class _FindSpecialistScreenState extends State<FindSpecialistScreen> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  const Text('Available Time Slots', style: TextStyle(fontWeight: FontWeight.w600)),
+                  const Text(
+                    'Available Time Slots',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
                   const SizedBox(height: 8),
                   if (loadingSlots)
-                    const Center(child: Padding(padding: EdgeInsets.all(16.0), child: CircularProgressIndicator()))
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(16.0),
+                        child: CircularProgressIndicator(),
+                      ),
+                    )
                   else if (availableSlots.isEmpty)
                     Padding(
                       padding: const EdgeInsets.all(16.0),
                       child: Center(
                         child: Column(
                           children: [
-                            Icon(Icons.event_busy, color: Colors.grey[400], size: 40),
+                            Icon(
+                              Icons.event_busy,
+                              color: Colors.grey[400],
+                              size: 40,
+                            ),
                             const SizedBox(height: 8),
-                            Text('No slots available on this day', style: TextStyle(color: Colors.grey[600])),
+                            Text(
+                              'No slots available on this day',
+                              style: TextStyle(color: Colors.grey[600]),
+                            ),
                             const SizedBox(height: 4),
-                            Text('Try picking another date or book now', style: TextStyle(color: Colors.grey[400], fontSize: 12)),
+                            Text(
+                              'Try picking another date or book now',
+                              style: TextStyle(
+                                color: Colors.grey[400],
+                                fontSize: 12,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -544,18 +622,32 @@ class _FindSpecialistScreenState extends State<FindSpecialistScreen> {
                         return ChoiceChip(
                           label: Text(time),
                           selected: isSelected,
-                          onSelected: available ? (selected) {
-                            setSheetState(() { selectedTime = selected ? time : null; });
-                          } : null,
-                          backgroundColor: available ? Colors.white : Colors.grey[200],
+                          onSelected: available
+                              ? (selected) {
+                                  setSheetState(() {
+                                    selectedTime = selected ? time : null;
+                                  });
+                                }
+                              : null,
+                          backgroundColor: available
+                              ? Colors.white
+                              : Colors.grey[200],
                           selectedColor: Colors.teal[700],
                           labelStyle: TextStyle(
-                            color: isSelected ? Colors.white : (available ? Colors.black87 : Colors.grey),
-                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                            color: isSelected
+                                ? Colors.white
+                                : (available ? Colors.black87 : Colors.grey),
+                            fontWeight: isSelected
+                                ? FontWeight.bold
+                                : FontWeight.normal,
                           ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
-                            side: BorderSide(color: isSelected ? Colors.teal[700]! : Colors.grey[300]!),
+                            side: BorderSide(
+                              color: isSelected
+                                  ? Colors.teal[700]!
+                                  : Colors.grey[300]!,
+                            ),
                           ),
                         );
                       }).toList(),
@@ -567,7 +659,9 @@ class _FindSpecialistScreenState extends State<FindSpecialistScreen> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.teal[700],
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                       onPressed: () {
                         Navigator.pop(ctx);
@@ -575,18 +669,37 @@ class _FindSpecialistScreenState extends State<FindSpecialistScreen> {
                           // Parse the selected time into a DateTime
                           final parts = selectedTime!.split(':');
                           final slotDateTime = DateTime(
-                            selectedDate.year, selectedDate.month, selectedDate.day,
-                            int.parse(parts[0]), int.parse(parts[1]),
+                            selectedDate.year,
+                            selectedDate.month,
+                            selectedDate.day,
+                            int.parse(parts[0]),
+                            int.parse(parts[1]),
                           );
-                          _bookAndWait(context, doctor, specialty, slotDateTime);
+                          _bookAndWait(
+                            context,
+                            doctor,
+                            specialty,
+                            slotDateTime,
+                          );
                         } else {
                           // Book immediately (now) if no slots available
-                          _bookAndWait(context, doctor, specialty, DateTime.now());
+                          _bookAndWait(
+                            context,
+                            doctor,
+                            specialty,
+                            DateTime.now(),
+                          );
                         }
                       },
                       child: Text(
-                        selectedTime != null ? 'Book at $selectedTime' : 'Book Now',
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                        selectedTime != null
+                            ? 'Book at $selectedTime'
+                            : 'Book Now',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
                       ),
                     ),
                   ),
@@ -601,7 +714,11 @@ class _FindSpecialistScreenState extends State<FindSpecialistScreen> {
   }
 
   Future<void> _bookAndWait(
-      BuildContext context, DoctorProfile doctor, String specialty, DateTime slotTime) async {
+    BuildContext context,
+    DoctorProfile doctor,
+    String specialty,
+    DateTime slotTime,
+  ) async {
     final service = context.read<DoctorService>();
     final TeleMedicineApiClient api = service.api;
     final reason = 'Teleconsultation with ${doctor.name}';
@@ -625,7 +742,9 @@ class _FindSpecialistScreenState extends State<FindSpecialistScreen> {
     if (!resp.success || resp.data == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(resp.error ?? 'Could not book appointment. Please try again.'),
+          content: Text(
+            resp.error ?? 'Could not book appointment. Please try again.',
+          ),
           backgroundColor: Colors.red,
         ),
       );
@@ -635,14 +754,21 @@ class _FindSpecialistScreenState extends State<FindSpecialistScreen> {
     final appointmentId =
         resp.data!['appointmentId']?.toString() ??
         resp.data!['appointment_id']?.toString() ??
-        (resp.data!['appointment'] is Map ? resp.data!['appointment']['appointmentId']?.toString() : null) ??
-        (resp.data!['appointment'] is Map ? resp.data!['appointment']['consultationId']?.toString() : null) ??
-        resp.data!['id']?.toString() ?? '';
+        (resp.data!['appointment'] is Map
+            ? resp.data!['appointment']['appointmentId']?.toString()
+            : null) ??
+        (resp.data!['appointment'] is Map
+            ? resp.data!['appointment']['consultationId']?.toString()
+            : null) ??
+        resp.data!['id']?.toString() ??
+        '';
 
     if (appointmentId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Appointment created but no appointment ID was returned. Please try again.'),
+          content: Text(
+            'Appointment created but no appointment ID was returned. Please try again.',
+          ),
           backgroundColor: Colors.red,
         ),
       );
@@ -675,7 +801,9 @@ class _FindSpecialistScreenState extends State<FindSpecialistScreen> {
             onPressed: () => _showConsentAndJoin(context, doctor),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.teal[700],
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
               elevation: 0,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             ),
@@ -699,35 +827,45 @@ class _FindSpecialistScreenState extends State<FindSpecialistScreen> {
                 final current = api.currentUserId ?? '';
                 if (current.isEmpty) {
                   if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please login to start chat')));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please login to start chat')),
+                  );
                   return;
                 }
                 final resp = await api.startChat([current, doctor.id]);
                 if (!mounted) return;
                 // ignore_for_file: use_build_context_synchronously
-                if (resp.success && resp.data != null && resp.data!['chatId'] != null) {
+                if (resp.success &&
+                    resp.data != null &&
+                    resp.data!['chatId'] != null) {
                   final chatId = resp.data!['chatId'] as String;
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => ChatScreen(api: api, chatId: chatId),
+                      builder: (context) =>
+                          ChatScreen(api: api, chatId: chatId),
                     ),
                   );
                 } else {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(resp.error?.toString() ?? 'Could not start chat')));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        resp.error?.toString() ?? 'Could not start chat',
+                      ),
+                    ),
+                  );
                 }
               } catch (e) {
                 if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text(e.toString())));
               }
             },
             style: OutlinedButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             ),
-            child: const Text(
-              'Chat',
-              style: TextStyle(fontSize: 12),
-            ),
+            child: const Text('Chat', style: TextStyle(fontSize: 12)),
           ),
         ),
       ],
