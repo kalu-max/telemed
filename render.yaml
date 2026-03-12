@@ -16,26 +16,8 @@ services:
         value: postgres
       - key: DB_SYNC_ALTER
         value: "false"
-      - key: DB_HOST
-        fromDatabase:
-          name: telemed-db
-          property: host
-      - key: DB_PORT
-        fromDatabase:
-          name: telemed-db
-          property: port
-      - key: DB_NAME
-        fromDatabase:
-          name: telemed-db
-          property: database
-      - key: DB_USER
-        fromDatabase:
-          name: telemed-db
-          property: user
-      - key: DB_PASSWORD
-        fromDatabase:
-          name: telemed-db
-          property: password
+      - key: DATABASE_URL
+        sync: false
       - key: JWT_SECRET
         generateValue: true
       - key: REFRESH_TOKEN_SECRET
@@ -49,10 +31,3 @@ services:
       # FIREBASE_PROJECT_ID = your Firebase project id
       # FIREBASE_DATABASE_URL = https://your-project.firebaseio.com
       # ALLOWED_ORIGINS     = comma-separated URLs for web clients (use * to allow any origin)
-
-databases:
-  - name: telemed-db
-    databaseName: telemedicine_db
-    user: telemed_user
-    plan: free
-    region: oregon

@@ -35,19 +35,30 @@ const sequelizeOptions = {
 };
 
 if (dialect === 'postgres') {
-  sequelizeOptions.host = process.env.DB_HOST || 'localhost';
-  sequelizeOptions.port = process.env.DB_PORT || 5432;
+  // Render and most cloud Postgres require SSL
+  sequelizeOptions.dialectOptions = {
+    ssl: {
+      require: true,
+      rejectUnauthorized: false
+    }
+  };
+  if (!process.env.DATABASE_URL) {
+    sequelizeOptions.host = process.env.DB_HOST || 'localhost';
+    sequelizeOptions.port = process.env.DB_PORT || 5432;
+  }
 } else if (dialect === 'sqlite') {
   // use in‑memory by default for tests
   sequelizeOptions.storage = process.env.DB_STORAGE || ':memory:';
 }
 
-const sequelize = new Sequelize(
-  process.env.DB_NAME || 'telemedicine_db',
-  process.env.DB_USER || 'postgres',
-  process.env.DB_PASSWORD || 'password',
-  sequelizeOptions
-);
+const sequelize = process.env.DATABASE_URL
+  ? new Sequelize(process.env.DATABASE_URL, sequelizeOptions)
+  : new Sequelize(
+      process.env.DB_NAME || 'telemedicine_db',
+      process.env.DB_USER || 'postgres',
+      process.env.DB_PASSWORD || 'password',
+      sequelizeOptions
+    );
 
 // Test connection
 sequelize.authenticate()
