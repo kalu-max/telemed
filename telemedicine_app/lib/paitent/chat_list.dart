@@ -49,10 +49,16 @@ class _ChatListScreenState extends State<ChatListScreen> {
                     final c = _chats[index];
                     final chatId = c['chatId'] ?? c['id'] ?? '';
                     final participants = (c['participants'] as List?)?.cast<String>() ?? [];
-                    final other = participants.where((p) => p != widget.api.currentUserId).join(', ');
-                    final lastMsg = (c['messages'] as List?)?.isNotEmpty == true ? c['messages'].last['text'] : '';
+                    final nameMap = (c['participantNames'] as Map?)?.cast<String, dynamic>() ?? {};
+                    final otherIds = participants.where((p) => p != widget.api.currentUserId).toList();
+                    final otherNames = otherIds.map((id) {
+                      final n = nameMap[id]?.toString() ?? '';
+                      return n.isNotEmpty && n != id ? n : 'User';
+                    }).join(', ');
+                    final msgs = c['messages'] as List?;
+                    final lastMsg = (msgs?.isNotEmpty == true) ? (msgs!.last['text'] ?? '') : '';
                     return ListTile(
-                      title: Text(other.isNotEmpty ? other : 'Conversation'),
+                      title: Text(otherNames.isNotEmpty ? otherNames : 'Conversation'),
                       subtitle: Text(lastMsg ?? ''),
                       onTap: () {
                         Navigator.push(

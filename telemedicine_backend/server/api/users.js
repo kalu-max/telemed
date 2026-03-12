@@ -444,7 +444,25 @@ router.get('/chats', asyncHandler(async (req, res) => {
   const userId = req.query.userId || requester.userId;
   if (userId !== requester.userId && requester.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
   const list = Object.values(chats).filter(c => c.participants.includes(userId));
-  res.json({ count: list.length, chats: list });
+  // Enrich with participant names from in-memory caches so clients can show real names
+  const enriched = list.map(chat => {
+    const participantNames = {};
+    for (const pid of (chat.participants || [])) {
+      if (doctors[pid]) {
+        participantNames[pid] = doctors[pid].name || pid;
+      } else {
+        // Try to find the name from appointments (patient name)
+        const appt = Object.values(appointments).find(a => a.patientId === pid || a.doctorId === pid);
+        if (appt) {
+          participantNames[pid] = appt.patientId === pid ? (appt.patientName || pid) : (appt.doctorName || pid);
+        } else {
+          participantNames[pid] = pid; // fallback: raw id
+        }
+      }
+    }
+    return { ...chat, participantNames };
+  });
+  res.json({ count: enriched.length, chats: enriched });
 }));
 
 // Get user appointments

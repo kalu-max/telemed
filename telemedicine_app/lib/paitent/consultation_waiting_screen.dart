@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'api_client.dart';
 import '../communication/widgets/call_widgets.dart' as call_widgets;
+import 'package:socket_io_client/socket_io_client.dart' as io;
 
 /// Shown after patient books a consultation.
 /// Counts down 60 seconds — polls appointment status every 5 s.
@@ -35,6 +36,7 @@ class _ConsultationWaitingScreenState extends State<ConsultationWaitingScreen>
   Timer? _pollTimer;
   bool _doctorConnected = false;
   bool _cancelled = false;
+  io.Socket? _socket;
 
   late final AnimationController _pulseController;
 
@@ -47,6 +49,26 @@ class _ConsultationWaitingScreenState extends State<ConsultationWaitingScreen>
     )..repeat(reverse: true);
     _startCountdown();
     _startPolling();
+    _connectSocket();
+  }
+
+  void _connectSocket() {
+    try {
+      final baseUrl = widget.api.baseUrl.replaceFirst(RegExp(r'/api/?$'), '');
+      final myId = widget.api.currentUserId ?? '';
+      _socket = io.io(baseUrl, io.OptionBuilder()
+          .setTransports(['websocket'])
+          .setQuery({'userId': myId, 'role': 'patient'})
+          .enableAutoConnect()
+          .build());
+      _socket!.on('appointmentAccepted', (data) {
+        if (!mounted || _doctorConnected || _cancelled) return;
+        final apptId = data is Map ? (data['appointmentId']?.toString() ?? '') : '';
+        if (apptId == widget.appointmentId || apptId.isEmpty) {
+          _onDoctorConnected();
+        }
+      });
+    } catch (_) {}
   }
 
   void _startCountdown() {
@@ -144,6 +166,7 @@ class _ConsultationWaitingScreenState extends State<ConsultationWaitingScreen>
     _countdownTimer?.cancel();
     _pollTimer?.cancel();
     _pulseController.dispose();
+    _socket?.dispose();
     super.dispose();
   }
 

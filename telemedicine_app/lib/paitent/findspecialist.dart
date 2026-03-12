@@ -439,6 +439,7 @@ class _FindSpecialistScreenState extends State<FindSpecialistScreen> {
     List<Map<String, dynamic>> availableSlots = [];
     String? selectedTime;
     bool loadingSlots = false;
+    bool _slotsLoaded = false;
 
     await showModalBottomSheet(
       context: context,
@@ -456,14 +457,14 @@ class _FindSpecialistScreenState extends State<FindSpecialistScreen> {
               if (!ctx.mounted) return;
               if (resp.success && resp.data != null) {
                 final slots = (resp.data!['slots'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-                setSheetState(() { availableSlots = slots; loadingSlots = false; });
+                setSheetState(() { availableSlots = slots; loadingSlots = false; _slotsLoaded = true; });
               } else {
-                setSheetState(() { availableSlots = []; loadingSlots = false; });
+                setSheetState(() { availableSlots = []; loadingSlots = false; _slotsLoaded = true; });
               }
             }
 
-            // Load on first build
-            if (availableSlots.isEmpty && !loadingSlots) {
+            // Load once on first build only
+            if (!_slotsLoaded && !loadingSlots) {
               Future.microtask(loadSlots);
             }
 

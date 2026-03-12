@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
 import 'api_client.dart';
+import 'chat_encryption_service.dart';
 
 class ChatScreen extends StatefulWidget {
   final TeleMedicineApiClient api;
@@ -23,10 +24,12 @@ class _ChatScreenState extends State<ChatScreen> {
   Timer? _typingDebounce;
   io.Socket? _socket;
   String get _myId => widget.api.currentUserId ?? '';
+  late final ChatEncryptionService _encryption;
 
   @override
   void initState() {
     super.initState();
+    _encryption = ChatEncryptionService.fromSharedSecret(widget.chatId);
     _loadMessages();
     _connectSocket();
   }
@@ -54,6 +57,13 @@ class _ChatScreenState extends State<ChatScreen> {
         if (data is Map && data['chatId'] == widget.chatId) {
           final msg = Map<String, dynamic>.from(data);
           if (msg['senderId'] != _myId) {
+            if (msg['messageType'] == 'text' && msg['text'] != null) {
+              try {
+                msg['text'] = _encryption.decrypt(msg['text']);
+              } catch (_) {
+                // Message may be unencrypted (legacy) — show as-is
+              }
+            }
             setState(() => _messages.add(msg));
             _scrollToBottom();
           }
@@ -89,8 +99,18 @@ class _ChatScreenState extends State<ChatScreen> {
     final resp = await widget.api.getChatMessages(widget.chatId);
     if (!mounted) return;
     if (resp.success && resp.data != null) {
+      final decrypted = resp.data!.map((msg) {
+        if (msg['messageType'] == 'text' && msg['text'] != null) {
+          try {
+            msg['text'] = _encryption.decrypt(msg['text']);
+          } catch (_) {
+            // Message may be unencrypted (legacy) — show as-is
+          }
+        }
+        return msg;
+      }).toList();
       setState(() {
-        _messages = resp.data!;
+        _messages = decrypted;
         _loading = false;
       });
       _scrollToBottom();
@@ -115,12 +135,18 @@ class _ChatScreenState extends State<ChatScreen> {
     final text = _controller.text.trim();
     if (text.isEmpty) return;
     _controller.clear();
-    final optimistic = {'senderId': _myId, 'text': text, 'messageType': 'text', 'timestamp': DateTime.now().toIso8601String()};
+    final optimistic = {
+      'senderId': _myId,
+      'text': text,
+      'messageType': 'text',
+      'timestamp': DateTime.now().toIso8601String(),
+    };
     setState(() => _messages.add(optimistic));
     _scrollToBottom();
     _socket?.emit('stopTyping', {'chatId': widget.chatId, 'userId': _myId});
 
-    final resp = await widget.api.sendChatMessage(widget.chatId, text);
+    final encrypted = _encryption.encrypt(text);
+    final resp = await widget.api.sendChatMessage(widget.chatId, encrypted);
     if (!mounted) return;
     if (!resp.success) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(resp.error?.toString() ?? 'Send failed')));
