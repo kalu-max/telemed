@@ -8,11 +8,12 @@ const { sendOtpEmail } = require('../services/emailService');
 
 const router = express.Router();
 
-// Seed admin user into persistent DB on startup — only when env vars are explicitly set
-const adminEmail = process.env.ADMIN_EMAIL;
-const adminPassword = process.env.ADMIN_PASSWORD;
-(async () => {
+// Seed admin user after the database is ready — only when env vars are explicitly set.
+async function seedAdminUser() {
   try {
+    const adminEmail = process.env.ADMIN_EMAIL;
+    const adminPassword = process.env.ADMIN_PASSWORD;
+
     if (!adminEmail || !adminPassword) {
       logger.warn('[SECURITY] ADMIN_EMAIL / ADMIN_PASSWORD not set — skipping admin seed. Set them in .env for production.');
       return;
@@ -36,7 +37,7 @@ const adminPassword = process.env.ADMIN_PASSWORD;
   } catch (e) {
     logger.warn(`Admin seed skipped: ${e.message}`);
   }
-})();
+}
 // Register
 router.post('/register', asyncHandler(async (req, res) => {
   const { email, password, name, role, specialization } = req.body;
@@ -287,3 +288,4 @@ router.post('/reset-password', asyncHandler(async (req, res) => {
 }));
 
 module.exports = router;
+module.exports.seedAdminUser = seedAdminUser;

@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "lib": ["ES2022"],
+    "allowJs": true,
+    "checkJs": false,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": ["node"],
+    "typeRoots": ["./telemedicine_backend/node_modules/@types"]
+  },
+  "include": [
+    "test_notifications.js",
+    "telemedicine_backend/**/*.js"
+  ],
+  "exclude": [
+    "**/node_modules/**",
+    "**/build/**",
+    "**/.dart_tool/**",
+    "telemedicine_app/**",
+    "telemedicine_backend/logs/**"
+  ]
+}

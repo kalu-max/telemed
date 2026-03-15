@@ -217,12 +217,27 @@ function startReminderSchedulerSafely() {
   }
 }
 
+async function seedApplicationState() {
+  if (typeof authAPI.seedAdminUser === 'function') {
+    await authAPI.seedAdminUser();
+  }
+
+  if (typeof userAPI.seedUsersCache === 'function') {
+    await userAPI.seedUsersCache();
+  }
+
+  if (typeof prescriptionsAPI.seedPrescriptionsCache === 'function') {
+    await prescriptionsAPI.seedPrescriptionsCache();
+  }
+}
+
 async function syncDatabaseWithRetry() {
   const retryMs = 30000;
   while (true) {
     try {
       logger.info('🔄 Synchronizing PostgreSQL database...');
       await syncDatabase();
+      await seedApplicationState();
       logger.info('✅ PostgreSQL ready');
       startReminderSchedulerSafely();
       return;

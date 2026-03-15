@@ -50,9 +50,21 @@ const notifications = {};
 const healthMetrics = {};
 const chats = {};
 
-// Seed in-memory caches from DB on startup
-(async () => {
+function clearObject(target) {
+  for (const key of Object.keys(target)) {
+    delete target[key];
+  }
+}
+
+// Seed in-memory caches after the database is ready.
+async function seedUsersCache() {
   try {
+    clearObject(doctors);
+    clearObject(patients);
+    clearObject(appointments);
+    clearObject(notifications);
+    clearObject(chats);
+
     // Load doctors
     const dbDoctors = await Doctor.findAll({ include: [{ model: User, attributes: ['name', 'email'] }] });
     for (const d of dbDoctors) {
@@ -113,7 +125,7 @@ const chats = {};
   } catch (e) {
     logger.warn(`Cache seed skipped: ${e.message}`);
   }
-})();
+}
 
 // helper to queue notification for a user (persisted + in-memory + push)
 async function pushNotification(userId, message) {
@@ -1108,3 +1120,4 @@ module.exports.notifications = notifications;
 module.exports.healthMetrics = healthMetrics;
 module.exports.chats = chats;
 module.exports.pushNotification = pushNotification;
+module.exports.seedUsersCache = seedUsersCache;

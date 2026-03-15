@@ -9,8 +9,17 @@ const router = express.Router();
 const prescriptions = {};
 const templatesByDoctor = {};
 
-(async () => {
+function clearObject(target) {
+  for (const key of Object.keys(target)) {
+    delete target[key];
+  }
+}
+
+async function seedPrescriptionsCache() {
   try {
+    clearObject(prescriptions);
+    clearObject(templatesByDoctor);
+
     const dbRx = await Prescription.findAll({ order: [['createdAt', 'DESC']] });
     for (const rx of dbRx) {
       prescriptions[rx.prescriptionId] = {
@@ -34,7 +43,7 @@ const templatesByDoctor = {};
   } catch (e) {
     logger.warn(`Prescriptions cache seed skipped: ${e.message}`);
   }
-})();
+}
 
 function canAccessPrescription(user, prescription) {
   if (!user) return false;
@@ -327,3 +336,4 @@ function escapeHtml(str) {
 
 module.exports = router;
 module.exports.prescriptions = prescriptions;
+module.exports.seedPrescriptionsCache = seedPrescriptionsCache;
