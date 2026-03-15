@@ -77,8 +77,8 @@ class AppConfig {
   static const String metricsNetworkPerformance = '/api/metrics/network/performance';
 
   // Network Configuration
-  static const Duration connectTimeout = Duration(seconds: 30);
-  static const Duration receiveTimeout = Duration(seconds: 30);
+  static const Duration connectTimeout = Duration(seconds: 60);
+  static const Duration receiveTimeout = Duration(seconds: 60);
   static const int maxRetries = 3;
 
   // Video Call Configuration
